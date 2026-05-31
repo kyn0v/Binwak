@@ -1,0 +1,110 @@
+### ========== Variables ==========
+@baseUrl = http://localhost:3000
+@token = paste-jwt-token-here
+
+### ========== Health check ==========
+
+GET {{baseUrl}}/api/health
+
+### ========== Login (requires a WeChat code from the Mini Program) ==========
+# @name login
+
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "code": "paste-wx-code-here"
+}
+
+### ========== Bingo board list ==========
+
+GET {{baseUrl}}/api/boards
+Authorization: Bearer {{token}}
+
+### ========== Create Bingo board ==========
+
+POST {{baseUrl}}/api/boards
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "测试Bingo卡",
+  "gridSize": 4,
+  "theme": "sand"
+}
+
+### ========== Get Bingo board details ==========
+
+GET {{baseUrl}}/api/boards/1
+Authorization: Bearer {{token}}
+
+### ========== Update Bingo board ==========
+
+PUT {{baseUrl}}/api/boards/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "更新后的标题",
+  "theme": "mint"
+}
+
+### ========== Batch update cells ==========
+
+PUT {{baseUrl}}/api/boards/1/cells
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cells": [
+    { "position": 0, "title": "喝咖啡" },
+    { "position": 1, "title": "逛书店" },
+    { "position": 2, "title": "拍建筑" },
+    { "position": 3, "title": "吃小吃" }
+  ]
+}
+
+### ========== Mark cell completed ==========
+
+POST {{baseUrl}}/api/boards/1/cells/0/complete
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "imagePath": "/uploads/test.jpg"
+}
+
+### ========== Delete Bingo board ==========
+
+DELETE {{baseUrl}}/api/boards/1
+Authorization: Bearer {{token}}
+
+### ========== Word bank list ==========
+
+GET {{baseUrl}}/api/wordbank
+Authorization: Bearer {{token}}
+
+### ========== Add word ==========
+
+POST {{baseUrl}}/api/wordbank
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "word": "逛菜市场"
+}
+
+### ========== Replace entire word bank ==========
+
+POST {{baseUrl}}/api/wordbank/batch
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "words": ["喝咖啡", "逛书店", "拍建筑", "吃小吃", "听街头音乐"]
+}
+
+### ========== Delete word ==========
+
+DELETE {{baseUrl}}/api/wordbank/1
+Authorization: Bearer {{token}}

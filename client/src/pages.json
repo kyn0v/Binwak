@@ -1,0 +1,58 @@
+{
+	"pages": [
+		{
+			"path": "pages/main/main",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTextStyle": "black",
+				"enablePullDownRefresh": false,
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/welcome/welcome",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTextStyle": "black",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/boards/boards",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "我的Bingo卡"
+			}
+		},
+		{
+			"path": "pages/wordbank/wordbank",
+			"style": {
+				"navigationBarTitleText": "词库管理"
+			}
+		},
+		{
+			"path": "pages/publish/publish",
+			"style": {
+				"navigationBarTitleText": "发布模板"
+			}
+		},
+		{
+			"path": "pages/mytemplates/mytemplates",
+			"style": {
+				"navigationBarTitleText": "我发布的模板"
+			}
+		},
+		{
+			"path": "pages/feedback/feedback",
+			"style": {
+				"navigationBarTitleText": "反馈建议"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "Binwak!",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	}
+}

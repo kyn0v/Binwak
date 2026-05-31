@@ -1,0 +1,136 @@
+name: Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'shared/**'
+      - 'admin/**'
+      - 'deploy/**'
+      - '.github/workflows/server.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'shared/**'
+  workflow_dispatch:
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix server
+
+      - name: Type check
+        run: cd server && npx tsc --noEmit
+
+      - name: Run tests
+        run: npm --prefix server run test
+
+      - name: Build
+        run: npm --prefix server run build
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_SERVER_PATH: ${{ secrets.DEPLOY_SERVER_PATH }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          missing=0
+          for key in DEPLOY_HOST DEPLOY_USER DEPLOY_SERVER_PATH DEPLOY_SSH_PRIVATE_KEY; do
+            if [ -z "${!key:-}" ]; then
+              echo "::error::Missing required secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Install admin dependencies
+        run: npm ci --prefix admin
+
+      - name: Build admin frontend
+        run: npm --prefix admin run build
+
+      - name: Run server tests
+        run: npm --prefix server run test
+
+      - name: Build server
+        run: npm --prefix server run build
+
+      - name: Setup SSH
+        uses: ./.github/actions/setup-ssh
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          user: ${{ secrets.DEPLOY_USER }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Sync artifacts to server
+        run: |
+          set -euo pipefail
+          rsync -az --delete -e "ssh -p ${DEPLOY_PORT:-22}" \
+            server/dist/ \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_SERVER_PATH}/dist/"
+
+          ADMIN_DEST=$(dirname "${DEPLOY_SERVER_PATH}")/admin/dist
+          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${ADMIN_DEST}'"
+          rsync -az --delete -e "ssh -p ${DEPLOY_PORT:-22}" \
+            admin/dist/ \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${ADMIN_DEST}/"
+
+          scp -P "${DEPLOY_PORT:-22}" \
+            server/package.json \
+            server/package-lock.json \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_SERVER_PATH}/"
+
+      - name: Install prod deps and restart PM2
+        run: |
+          set -euo pipefail
+          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -euo pipefail; \
+            cd '${DEPLOY_SERVER_PATH}'; \
+            npm install --omit=dev --no-audit --no-fund; \
+            pm2 restart binwak-api --update-env; \
+            for i in 1 2 3 4 5; do \
+              if curl -fsS --max-time 10 http://127.0.0.1:3000/api/health >/dev/null; then \
+                curl -fsS --max-time 10 http://127.0.0.1:3000/api/health; \
+                exit 0; \
+              fi; \
+              sleep 2; \
+            done; \
+            echo 'Health check failed after retries' >&2; \
+            pm2 logs binwak-api --lines 80 --nostream || true; \
+            exit 1"

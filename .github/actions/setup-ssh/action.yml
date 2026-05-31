@@ -1,0 +1,27 @@
+name: Setup SSH
+description: Configure SSH for remote server deployment
+
+inputs:
+  host:
+    required: true
+  user:
+    required: true
+  port:
+    required: false
+    default: '22'
+  private-key:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure SSH
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        printf '%s\n' "${{ inputs.private-key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -p "${{ inputs.port }}" "${{ inputs.host }}" >> ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts

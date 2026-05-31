@@ -1,0 +1,51 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+*.local
+
+# Editor directories and files
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI assistant session/config files
+.claude
+.cursor
+.aider*
+.continue
+.windsurf
+.codeium
+.github-copilot
+.copilot
+
+# Server
+server/data/
+server/uploads/
+server/.env
+server/dist/*.http
+
+# Client env files (use .env.example as template)
+client/.env
+client/.env.*
+!client/.env.example
+
+# Shared compiled output
+shared/*.js
+shared/*.js.map
+shared/*.d.ts
+shared/*.d.ts.map
+
+# TypeScript build cache
+*.tsbuildinfo
