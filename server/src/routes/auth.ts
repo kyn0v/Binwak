@@ -9,6 +9,41 @@ import type { LoginRequest, LoginResponse, ProfileResponse, UpdateProfileRequest
 
 const router = Router()
 
+const STARTER_TEMPLATE_ID = 2 // Nice Try I — comes with cell illustrations bundled
+
+/**
+ * Create an initial active board for a brand-new user, sourced from the
+ * configured starter template (Nice Try I). Best-effort: callers should
+ * swallow errors so login still succeeds even if seeding fails.
+ */
+function seedStarterBoard(db: ReturnType<typeof getDb>, userId: number): void {
+  const template = db
+    .prepare(`SELECT id, title, grid_size FROM templates WHERE id = ? AND status = 'active'`)
+    .get(STARTER_TEMPLATE_ID) as { id: number; title: string; grid_size: number } | undefined
+  if (!template) return
+
+  const cells = db
+    .prepare(`SELECT position, title, image_path FROM template_cells WHERE template_id = ? ORDER BY position`)
+    .all(template.id) as { position: number; title: string; image_path: string }[]
+  if (!cells.length) return
+
+  const insertCell = db.prepare(`
+    INSERT INTO cells (board_id, position, title, illustration_path, completed)
+    VALUES (?, ?, ?, ?, 0)
+  `)
+
+  const tx = db.transaction(() => {
+    const boardResult = db
+      .prepare(`INSERT INTO boards (user_id, title, grid_size, theme, is_active) VALUES (?, ?, ?, 'mono', 1)`)
+      .run(userId, template.title, template.grid_size)
+    const boardId = boardResult.lastInsertRowid as number
+    for (const cell of cells) {
+      insertCell.run(boardId, cell.position, cell.title, cell.image_path || '')
+    }
+  })
+  tx()
+}
+
 /** Generate access token + refresh token pair */
 function generateTokens(userId: number, openid: string) {
   const accessToken = jwt.sign(
@@ -63,6 +98,13 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       const result = db.prepare('INSERT INTO users (openid, nickname) VALUES (?, ?)').run(openid, defaultNickname)
       user = { id: result.lastInsertRowid as number, openid, nickname: defaultNickname }
       isNewUser = true
+
+      // Seed a starter board from the default template (Nice Try I) so first launch isn't empty
+      try {
+        seedStarterBoard(db, user.id)
+      } catch (err) {
+        console.warn('[Auth] Seed starter board failed:', err)
+      }
     }
 
     // 3. Issue access token + refresh token

@@ -395,7 +395,17 @@ function illustModeKey() {
 
 function loadIllustMode() {
   const key = illustModeKey()
-  isIllustMode.value = key ? !!safeGet(key) : false
+  if (!key) {
+    isIllustMode.value = false
+    return
+  }
+  const stored = safeGet(key)
+  if (stored === undefined) {
+    // No explicit preference yet: default ON if the board has any illustration-bearing cells
+    isIllustMode.value = cells.value.some(c => !!c.illustrationPath)
+  } else {
+    isIllustMode.value = !!stored
+  }
 }
 
 async function toggleIllustMode() {
