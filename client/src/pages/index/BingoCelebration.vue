@@ -17,8 +17,6 @@
         </button>
         <view class="bingo-btn-row">
           <button class="bingo-btn secondary" @tap="$emit('preview')">预览卡片</button>
-          <button v-if="isAllDone && !currentPublishedTemplateId" class="bingo-btn secondary" @tap="$emit('publish')">发布广场</button>
-          <button v-else class="bingo-btn secondary" @tap="$emit('share')">分享</button>
         </view>
       </view>
     </view>
@@ -38,8 +36,6 @@ const props = defineProps<{
 defineEmits<{
   dismiss: []
   preview: []
-  share: []
-  publish: []
 }>()
 
 const ordinalColors = ['#ffd166', '#ff9f43', '#06d6a0', '#4cc9f0', '#a29bfe']

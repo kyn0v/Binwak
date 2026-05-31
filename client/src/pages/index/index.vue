@@ -187,8 +187,6 @@
       :current-published-template-id="currentPublishedTemplateId"
       @dismiss="dismissBingo"
       @preview="onBingoPreview"
-      @share="onBingoShare"
-      @publish="onBingoPublish"
     />
 
     <MilestoneToast :toast="milestoneToast" :exiting="milestoneExiting" />
@@ -1418,16 +1416,6 @@ function onPreviewCard() {
 function onBingoPreview() {
   dismissBingo()
   _previewCard()
-}
-
-function onBingoShare() {
-  dismissBingo()
-  showSharePanel.value = true
-}
-
-function onBingoPublish() {
-  dismissBingo()
-  onOpenPublishPanel()
 }
 
 // Debounced sync to the server (skip changes that came from a remote load)
