@@ -695,27 +695,35 @@ router.put('/:id/cells', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  // Two statements: one that updates illustration_path, one that leaves it untouched.
-  // A client that omits `illustrationPath` (e.g. older app versions, or any client
-  // that doesn't manage illustrations) must NOT wipe a cell's existing illustration —
-  // otherwise seeded starter boards lose their thumbnails on the first cell sync.
-  const updateWithIllust = db.prepare(
-    'UPDATE cells SET title = ?, illustration_path = ?, completed = ? WHERE board_id = ? AND position = ?'
+  // illustration_path handling per cell:
+  //  - field present (a key/URL, or '' to clear)  → apply it verbatim
+  //  - field omitted (client isn't managing illustrations on this push):
+  //      • title unchanged → preserve the existing illustration. This is what
+  //        protects a freshly seeded starter board: the client's first cell
+  //        sync re-sends the seeded titles without illustrationPath, and the
+  //        seeded thumbnails must survive.
+  //      • title changed   → clear it, because an illustration tied to the old
+  //        word is stale once the word is reassigned.
+  const selectCell = db.prepare(
+    'SELECT title, illustration_path FROM cells WHERE board_id = ? AND position = ?'
   )
-  const updateKeepIllust = db.prepare(
-    'UPDATE cells SET title = ?, completed = ? WHERE board_id = ? AND position = ?'
+  const updateStmt = db.prepare(
+    'UPDATE cells SET title = ?, illustration_path = ?, completed = ? WHERE board_id = ? AND position = ?'
   )
   const updateAll = db.transaction(() => {
     for (const cell of cells) {
       const completed = cell.completed ? 1 : 0
-      if (cell.illustrationPath === undefined) {
-        // Field absent → preserve whatever illustration the cell already has
-        updateKeepIllust.run(cell.title, completed, boardId, cell.position)
+      let illustPath: string
+      if (cell.illustrationPath !== undefined) {
+        illustPath = extractStorageKey(cell.illustrationPath || '')
       } else {
-        // Field present (a URL/key, or '' to explicitly clear) → apply it
-        const illustPath = extractStorageKey(cell.illustrationPath || '')
-        updateWithIllust.run(cell.title, illustPath, completed, boardId, cell.position)
+        const existing = selectCell.get(boardId, cell.position) as
+          | { title: string; illustration_path: string }
+          | undefined
+        illustPath =
+          existing && existing.title === cell.title ? existing.illustration_path || '' : ''
       }
+      updateStmt.run(cell.title, illustPath, completed, boardId, cell.position)
     }
   })
   updateAll()

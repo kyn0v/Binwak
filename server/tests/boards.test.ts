@@ -247,7 +247,7 @@ describe('Boards API', () => {
       expect(cells[2].title).toBe('老建筑')
     })
 
-    it('preserves existing illustration_path when the field is omitted', async () => {
+    it('preserves existing illustration_path when the field is omitted and title is unchanged', async () => {
       const db = (await import('../src/db/database')).getDb()
       const { token } = createTestUser()
       const created = await request(app)
@@ -256,21 +256,47 @@ describe('Boards API', () => {
         .send({ gridSize: 3 })
       const boardId = created.body.data.id
 
-      // Seed an illustration on cell 0 directly (simulates a starter/template board)
-      db.prepare("UPDATE cells SET illustration_path = 'illustrations/flower.png' WHERE board_id = ? AND position = 0")
+      // Seed a cell with BOTH a title and an illustration (simulates a starter/template board)
+      db.prepare("UPDATE cells SET title = '花束', illustration_path = 'illustrations/flower.png' WHERE board_id = ? AND position = 0")
         .run(boardId)
 
-      // Client pushes cells WITHOUT illustrationPath (older app behaviour)
+      // Client re-pushes the same title WITHOUT illustrationPath (first sync of a seeded board)
       const res = await request(app)
         .put(`/api/boards/${boardId}/cells`)
         .set('Authorization', authHeader(token))
         .send({ cells: [{ position: 0, title: '花束', completed: false }] })
 
       expect(res.status).toBe(200)
-      // Illustration must survive the title-only update
+      // Seeded illustration must survive the title-only update
       const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
         .get(boardId) as { illustration_path: string }
       expect(row.illustration_path).toBe('illustrations/flower.png')
+    })
+
+    it('clears a stale illustration_path when the field is omitted and the title changed', async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      // Cell currently shows '瀑布' with the waterfall illustration
+      db.prepare("UPDATE cells SET title = '瀑布', illustration_path = 'illustrations/waterfall.png' WHERE board_id = ? AND position = 0")
+        .run(boardId)
+
+      // User reassigns the cell to a word with no illustration → client omits illustrationPath
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '便利店', completed: false }] })
+
+      expect(res.status).toBe(200)
+      // The old word's illustration must not linger on the new word
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('')
     })
 
     it('clears illustration_path when an empty string is explicitly sent', async () => {
@@ -282,13 +308,13 @@ describe('Boards API', () => {
         .send({ gridSize: 3 })
       const boardId = created.body.data.id
 
-      db.prepare("UPDATE cells SET illustration_path = 'illustrations/flower.png' WHERE board_id = ? AND position = 0")
+      db.prepare("UPDATE cells SET title = '瀑布', illustration_path = 'illustrations/flower.png' WHERE board_id = ? AND position = 0")
         .run(boardId)
 
       const res = await request(app)
         .put(`/api/boards/${boardId}/cells`)
         .set('Authorization', authHeader(token))
-        .send({ cells: [{ position: 0, title: '新词', illustrationPath: '' }] })
+        .send({ cells: [{ position: 0, title: '瀑布', illustrationPath: '' }] })
 
       expect(res.status).toBe(200)
       const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
