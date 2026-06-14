@@ -1,6 +1,6 @@
 <template>
   <view class="main-container">
-    <view class="tab-content" :style="{ paddingBottom: tabbarHeight + 'px' }">
+    <view v-if="pageReady" class="tab-content" :style="{ paddingBottom: tabbarHeight + 'px' }">
       <view v-show="currentTab === 'index'" class="tab-pane tab-pane-noscroll"><IndexTab ref="indexRef" :status-bar-height="statusBarHeight" :capsule-top="capsuleTop" :capsule-right-rpx="capsuleRightRpx" /></view>
       <view v-if="currentTab === 'plaza'" class="tab-pane"><PlazaTab ref="plazaRef" :status-bar-height="statusBarHeight" :capsule-top="capsuleTop" :tabbar-height="tabbarHeight" /></view>
       <view v-if="profileMounted" v-show="currentTab === 'profile'" class="tab-pane"><ProfileTab ref="profileRef" :status-bar-height="statusBarHeight" /></view>
@@ -43,6 +43,12 @@ import ProfileTab from '../profile/profile.vue'
 
 const currentTab = ref('index')
 const profileMounted = ref(false)
+// Gate tab-content mounting until onboarding is confirmed. On a brand-new user
+// main is the entry page and immediately redirects to the welcome/onboarding
+// flow; without this gate IndexTab would mount during that redirect and kick off
+// a login + initial-sync cycle that gets torn down mid-flight, leaving
+// remoteBoardId unset (uploads silently no-op) and the homepage half-rendered.
+const pageReady = ref(false)
 const safeAreaBottom = ref(0)
 const statusBarHeight = ref(0)
 const capsuleTop = ref(0)
@@ -90,7 +96,9 @@ onUnmounted(() => { uni.$off('switch-tab', onSwitchTab) })
 onLoad(() => {
   if (!safeGet(STORAGE_KEYS.ONBOARDED)) {
     uni.redirectTo({ url: '/pages/welcome/welcome' })
+    return
   }
+  pageReady.value = true
 })
 
 onMounted(() => {
