@@ -695,14 +695,27 @@ router.put('/:id/cells', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  const updateStmt = db.prepare(
+  // Two statements: one that updates illustration_path, one that leaves it untouched.
+  // A client that omits `illustrationPath` (e.g. older app versions, or any client
+  // that doesn't manage illustrations) must NOT wipe a cell's existing illustration —
+  // otherwise seeded starter boards lose their thumbnails on the first cell sync.
+  const updateWithIllust = db.prepare(
     'UPDATE cells SET title = ?, illustration_path = ?, completed = ? WHERE board_id = ? AND position = ?'
+  )
+  const updateKeepIllust = db.prepare(
+    'UPDATE cells SET title = ?, completed = ? WHERE board_id = ? AND position = ?'
   )
   const updateAll = db.transaction(() => {
     for (const cell of cells) {
-      const illustPath = extractStorageKey(cell.illustrationPath || '')
       const completed = cell.completed ? 1 : 0
-      updateStmt.run(cell.title, illustPath, completed, boardId, cell.position)
+      if (cell.illustrationPath === undefined) {
+        // Field absent → preserve whatever illustration the cell already has
+        updateKeepIllust.run(cell.title, completed, boardId, cell.position)
+      } else {
+        // Field present (a URL/key, or '' to explicitly clear) → apply it
+        const illustPath = extractStorageKey(cell.illustrationPath || '')
+        updateWithIllust.run(cell.title, illustPath, completed, boardId, cell.position)
+      }
     }
   })
   updateAll()

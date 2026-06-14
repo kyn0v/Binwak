@@ -247,6 +247,55 @@ describe('Boards API', () => {
       expect(cells[2].title).toBe('老建筑')
     })
 
+    it('preserves existing illustration_path when the field is omitted', async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      // Seed an illustration on cell 0 directly (simulates a starter/template board)
+      db.prepare("UPDATE cells SET illustration_path = 'illustrations/flower.png' WHERE board_id = ? AND position = 0")
+        .run(boardId)
+
+      // Client pushes cells WITHOUT illustrationPath (older app behaviour)
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '花束', completed: false }] })
+
+      expect(res.status).toBe(200)
+      // Illustration must survive the title-only update
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('illustrations/flower.png')
+    })
+
+    it('clears illustration_path when an empty string is explicitly sent', async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      db.prepare("UPDATE cells SET illustration_path = 'illustrations/flower.png' WHERE board_id = ? AND position = 0")
+        .run(boardId)
+
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '新词', illustrationPath: '' }] })
+
+      expect(res.status).toBe(200)
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('')
+    })
+
     it('returns 404 for non-existent board', async () => {
       const { token } = createTestUser()
       const res = await request(app)
