@@ -695,13 +695,34 @@ router.put('/:id/cells', async (req: Request, res: Response): Promise<void> => {
     }
   }
 
+  // illustration_path handling per cell:
+  //  - field present (a key/URL, or '' to clear)  → apply it verbatim
+  //  - field omitted (client isn't managing illustrations on this push):
+  //      • title unchanged → preserve the existing illustration. This is what
+  //        protects a freshly seeded starter board: the client's first cell
+  //        sync re-sends the seeded titles without illustrationPath, and the
+  //        seeded thumbnails must survive.
+  //      • title changed   → clear it, because an illustration tied to the old
+  //        word is stale once the word is reassigned.
+  const selectCell = db.prepare(
+    'SELECT title, illustration_path FROM cells WHERE board_id = ? AND position = ?'
+  )
   const updateStmt = db.prepare(
     'UPDATE cells SET title = ?, illustration_path = ?, completed = ? WHERE board_id = ? AND position = ?'
   )
   const updateAll = db.transaction(() => {
     for (const cell of cells) {
-      const illustPath = extractStorageKey(cell.illustrationPath || '')
       const completed = cell.completed ? 1 : 0
+      let illustPath: string
+      if (cell.illustrationPath !== undefined) {
+        illustPath = extractStorageKey(cell.illustrationPath || '')
+      } else {
+        const existing = selectCell.get(boardId, cell.position) as
+          | { title: string; illustration_path: string }
+          | undefined
+        illustPath =
+          existing && existing.title === cell.title ? existing.illustration_path || '' : ''
+      }
       updateStmt.run(cell.title, illustPath, completed, boardId, cell.position)
     }
   })
