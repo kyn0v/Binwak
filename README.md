@@ -59,6 +59,12 @@ npm --prefix client run test   # 前端测试
 - [bingo.moonwillknow.dev](https://bingo.moonwillknow.dev)
 - [nicetrypod.com/2024/bingo2nd](https://nicetrypod.com/2024/bingo2nd)
 
+### Copilot 审查技能（Thermos 迁移）
+
+- 已将 Thermos 从 Cursor 插件结构迁移为 Copilot 原生结构：`.github/skills/` 与 `.github/agents/`
+- 可用技能：`/thermos`、`/thermo-nuclear-review`、`/thermo-nuclear-code-quality-review`
+- 来源与 MIT 署名见：`.github/skills/thermos/NOTICE`
+
 ### License
 
 MIT
@@ -119,6 +125,12 @@ npm --prefix client run test   # frontend tests
 
 - [bingo.moonwillknow.dev](https://bingo.moonwillknow.dev)
 - [nicetrypod.com/2024/bingo2nd](https://nicetrypod.com/2024/bingo2nd)
+
+### Copilot Review Skills (Thermos migration)
+
+- Thermos has been migrated from Cursor plugin format into Copilot-native `.github/skills/` and `.github/agents/`.
+- Available skills: `/thermos`, `/thermo-nuclear-review`, `/thermo-nuclear-code-quality-review`.
+- Source attribution and MIT notice: `.github/skills/thermos/NOTICE`.
 
 ### License
 
