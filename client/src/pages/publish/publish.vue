@@ -66,7 +66,7 @@
         <button class="action-btn cancel-btn" @tap="onCancel">取消</button>
         <button
           class="action-btn publish-btn"
-          :disabled="isPublishing || !publishTitle.trim() || (quota && quota.dailyRemaining <= 0)"
+          :disabled="isPublishing || !publishTitle.trim() || !!(quota && quota.dailyRemaining <= 0)"
           @tap="onPublish"
         >
           {{ isPublishing ? '发布中...' : '发布模板' }}

@@ -19,6 +19,7 @@ import {
   resolveApiUrl,
 } from './api'
 import type { BingoCell } from './useBingoBoard'
+import type { BoardDetail } from '../../../../shared/types'
 import { useBingoBoard } from './useBingoBoard'
 import { DEFAULT_WORDS } from './bingoDefaults'
 
@@ -32,19 +33,6 @@ export function defaultBoardTitle(existingTitles: string[] = []): string {
   let i = 2
   while (existingTitles.includes(`${base} #${i}`)) i++
   return `${base} #${i}`
-}
-
-interface RemoteBoard {
-  id: number
-  title: string
-  gridSize: number
-  theme: string
-  isActive: boolean
-  completedCount?: number
-  totalCount?: number
-  createdAt: string
-  updatedAt: string
-  cells: Array<{ position: number; title: string; imageName: string; imageUrl?: string; completed: boolean }>
 }
 
 import { STORAGE_KEYS } from '@/config/storageKeys'
@@ -195,7 +183,7 @@ export function useSync() {
       // 1. Check whether a remote Bingo board exists (no longer push the word bank every time, only when the user edits)
       loadBoardId()
       const requestedBoardId = remoteBoardId.value
-      let board
+      let board: BoardDetail | undefined
 
       if (remoteBoardId.value) {
         try {
@@ -251,7 +239,7 @@ export function useSync() {
           gridSize: board.gridSize,
           theme: board.theme,
           wordBank: undefined as string[] | undefined,
-          publishedTemplateId: (board as any).publishedTemplateId || null,
+          publishedTemplateId: board.publishedTemplateId || null,
         }
         cacheBoard(board.id, result)
         return result
@@ -273,7 +261,7 @@ export function useSync() {
         gridSize: board.gridSize,
         theme: board.theme,
         wordBank: undefined as string[] | undefined,
-        publishedTemplateId: (board as any).publishedTemplateId || null,
+        publishedTemplateId: board.publishedTemplateId || null,
       }
       cacheBoard(board.id, result)
       return result
@@ -419,7 +407,7 @@ export function useSync() {
         cells: remoteCells,
         gridSize: board.gridSize,
         theme: board.theme,
-        publishedTemplateId: (board as any).publishedTemplateId || null,
+        publishedTemplateId: board.publishedTemplateId || null,
       }
 
       applyRemoteBoard({

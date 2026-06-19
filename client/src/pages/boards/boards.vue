@@ -127,7 +127,7 @@
           v-for="tpl in favTemplates"
           :key="tpl.id"
           class="board-card fav-tpl-card"
-          @tap="() => uni.navigateTo({ url: '/pages/plaza/plaza?templateId=' + tpl.id })"
+          @tap="() => openFavTemplate(tpl.id)"
         >
           <view class="board-card-header">
             <view class="board-info">
@@ -384,6 +384,10 @@ function switchTab(tab: 'boards' | 'favorites') {
 function goToPlaza() {
   uni.$emit('switch-tab', 'plaza')
   uni.navigateBack()
+}
+
+function openFavTemplate(templateId: number) {
+  uni.navigateTo({ url: '/pages/plaza/plaza?templateId=' + templateId })
 }
 
 async function loadFavTemplates() {
