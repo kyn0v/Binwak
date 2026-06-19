@@ -241,7 +241,7 @@ router.get('/', optionalAuth, (req: Request, res: Response) => {
 router.get('/:id', optionalAuth, (req: Request, res: Response) => {
   const db = getDb()
   const currentUserId = (req as AuthRequest).user?.userId
-  const templateId = parseInt(req.params.id)
+  const templateId = parseInt(req.params.id as string)
 
   const row = db.prepare(`
     SELECT * FROM templates WHERE id = ? AND status = 'active'
@@ -442,7 +442,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.post('/:id/favorite', authMiddleware, (req: AuthRequest, res: Response) => {
   const db = getDb()
   const userId = req.user!.userId
-  const templateId = parseInt(req.params.id)
+  const templateId = parseInt(req.params.id as string)
 
   // Check template exists
   const template = db.prepare(
@@ -493,7 +493,7 @@ router.post('/:id/favorite', authMiddleware, (req: AuthRequest, res: Response) =
 router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) => {
   const db = getDb()
   const userId = req.user!.userId
-  const templateId = parseInt(req.params.id)
+  const templateId = parseInt(req.params.id as string)
 
   // Board count limit
   const boardCount = db.prepare('SELECT COUNT(*) as cnt FROM boards WHERE user_id = ?').get(userId) as { cnt: number }
@@ -635,7 +635,7 @@ router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) 
 router.delete('/:id', authMiddleware, (req: AuthRequest, res: Response) => {
   const db = getDb()
   const userId = req.user!.userId
-  const templateId = parseInt(req.params.id)
+  const templateId = parseInt(req.params.id as string)
 
   // Check ownership
   const template = db.prepare('SELECT * FROM templates WHERE id = ?').get(templateId) as any

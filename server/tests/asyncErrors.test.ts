@@ -5,10 +5,12 @@ import { config } from '../src/config'
 import { resetTokenCache } from '../src/services/moderation'
 import { authHeader, createTestUser } from './helpers'
 
-// Regression test for the Express 4 async-error-forwarding fix.
-// An unexpected rejection thrown inside an `async` route handler (here, the
-// outbound GitHub `fetch` in POST /api/feedback) must reach the global
-// errorHandler and produce a structured 500 — instead of hanging the request.
+// Regression test for async-error forwarding. Express 5 natively forwards a
+// rejected promise from an `async` route handler to the error middleware
+// (Express 4 needed the `express-async-errors` shim, since removed). An
+// unexpected rejection thrown inside an `async` handler (here, the outbound
+// GitHub `fetch` in POST /api/feedback) must reach the global errorHandler and
+// produce a structured 500 — instead of hanging the request.
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)

@@ -281,7 +281,7 @@ router.get('/:id', (req: Request, res: Response): void => {
   const db = getDb()
   const board = db
     .prepare('SELECT * FROM boards WHERE id = ? AND user_id = ?')
-    .get(parseInt(req.params.id), req.user!.userId) as any
+    .get(parseInt(req.params.id as string), req.user!.userId) as any
 
   if (!board) {
     res.status(404).json({ success: false, error: 'Bingo卡不存在' } as ApiResponse)
@@ -299,7 +299,7 @@ router.get('/:id', (req: Request, res: Response): void => {
  */
 router.post('/:id/activate', (req: Request, res: Response): void => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
 
   const board = db
@@ -329,7 +329,7 @@ router.post('/:id/activate', (req: Request, res: Response): void => {
  */
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
   const { title, gridSize, theme } = req.body as UpdateBoardRequest
 
@@ -427,7 +427,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/:id/reset', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
 
   const board = db
@@ -465,7 +465,7 @@ router.post('/:id/reset', async (req: Request, res: Response): Promise<void> => 
  */
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
 
   // Check board exists
@@ -504,7 +504,7 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/:id/clone', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
   const { title } = req.body as { title?: string }
 
@@ -640,7 +640,7 @@ router.post('/:id/clone', async (req: Request, res: Response): Promise<void> => 
  */
 router.patch('/:id/publish', (req: Request, res: Response): void => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
   const { publishedTemplateId } = req.body as { publishedTemplateId: number | null }
 
@@ -675,7 +675,7 @@ router.patch('/:id/publish', (req: Request, res: Response): void => {
  */
 router.put('/:id/cells', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const boardId = parseInt(req.params.id)
+  const boardId = parseInt(req.params.id as string)
   const userId = req.user!.userId
   const { cells } = req.body as UpdateCellsRequest
 

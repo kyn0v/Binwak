@@ -176,7 +176,7 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
  * Delete user's own illustration.
  */
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id as string)
   if (!Number.isFinite(id)) {
     res.status(400).json({ success: false, error: '无效的 ID' } as ApiResponse)
     return
