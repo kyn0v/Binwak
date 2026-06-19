@@ -356,6 +356,7 @@ import { useAuth } from './useAuth'
 import { useSync, defaultBoardTitle } from './useSync'
 import { deleteBoard, resolveApiUrl, matchIllustrations, getProfile } from './api'
 import { usePrivateImage } from './usePrivateImage'
+import { getBoardState as boardStateOf, defaultIllustModeOn } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
 
@@ -402,7 +403,7 @@ function loadIllustMode() {
   const stored = safeGet(key)
   if (stored === undefined) {
     // No explicit preference yet: default ON if the board has any illustration-bearing cells
-    isIllustMode.value = cells.value.some(c => !!c.illustrationPath)
+    isIllustMode.value = defaultIllustModeOn(cells.value)
   } else {
     isIllustMode.value = !!stored
   }
@@ -683,11 +684,7 @@ async function onSwitcherSelect(board: any) {
 
 // Classify current board: 'empty' | 'words-only' | 'has-images'
 function getBoardState(): 'empty' | 'words-only' | 'has-images' {
-  const hasImage = cells.value.some(c => c.imagePath)
-  if (hasImage) return 'has-images'
-  const hasWord = cells.value.some(c => c.title && c.title.trim())
-  if (hasWord) return 'words-only'
-  return 'empty'
+  return boardStateOf(cells.value)
 }
 
 async function onSwitcherCreate() {
