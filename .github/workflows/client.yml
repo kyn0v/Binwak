@@ -78,5 +78,15 @@ jobs:
           WX_APPID: ${{ secrets.WX_APPID }}
           WX_UPLOAD_KEY: ${{ secrets.WX_UPLOAD_KEY }}
           VERSION: "1.0.${{ github.run_number }}"
-          UPLOAD_DESC: "CI #${{ github.run_number }} - ${{ github.event.head_commit.message }}"
-        run: cd client && node upload.js
+          # Keep the WeChat "project note" short: build number, commit short SHA
+          # and the FIRST LINE of the commit message only (avoids dumping the
+          # whole multi-line commit body + trailers into the note).
+          COMMIT_SUBJECT: ${{ github.event.head_commit.message }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # First line of the commit message only.
+          SUBJECT="$(printf '%s' "$COMMIT_SUBJECT" | head -n1)"
+          export UPLOAD_DESC="CI #${RUN_NUMBER} ${SHORT_SHA:0:7} - ${SUBJECT}"
+          cd client && node upload.js
