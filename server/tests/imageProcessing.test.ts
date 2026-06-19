@@ -36,4 +36,33 @@ describe('prepareImageForStorage', () => {
       await cleanupFiles([prepared.filePath, ...prepared.cleanupPaths])
     }
   })
+
+  it('rejects a file whose bytes do not match the declared image type', async () => {
+    fs.mkdirSync(config.uploadDir, { recursive: true })
+    // Non-image bytes uploaded with a spoofed image/gif content-type.
+    const inputPath = path.join(config.uploadDir, `spoof-${Date.now()}.gif`)
+    fs.writeFileSync(inputPath, Buffer.from('<html>not an image</html>'))
+
+    try {
+      await expect(prepareImageForStorage(inputPath, 'image/gif')).rejects.toThrow(/does not match declared type/)
+    } finally {
+      await cleanupFiles([inputPath])
+    }
+  })
+
+  it('accepts a real GIF via the pass-through branch', async () => {
+    fs.mkdirSync(config.uploadDir, { recursive: true })
+    const inputPath = path.join(config.uploadDir, `real-${Date.now()}.gif`)
+    // Minimal valid GIF89a header + body.
+    const gif = Buffer.from('474946383961010001008000000000ffffff21f90400000000002c00000000010001000002024401003b', 'hex')
+    fs.writeFileSync(inputPath, gif)
+
+    const prepared = await prepareImageForStorage(inputPath, 'image/gif')
+    try {
+      expect(prepared.fileName).toMatch(/^[0-9a-f]{32}\.gif$/)
+      expect(prepared.filePath).toBe(inputPath)
+    } finally {
+      await cleanupFiles([prepared.filePath, ...prepared.cleanupPaths])
+    }
+  })
 })
