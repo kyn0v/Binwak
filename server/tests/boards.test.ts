@@ -322,6 +322,88 @@ describe('Boards API', () => {
       expect(row.illustration_path).toBe('')
     })
 
+    it('persists an allowed illustrations/ key supplied by the client', async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '花束', illustrationPath: 'illustrations/u1/abc.jpg' }] })
+
+      expect(res.status).toBe(200)
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('illustrations/u1/abc.jpg')
+    })
+
+    it('persists an allowed templates/ snapshot key (seeded starter board)', async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '瀑布', illustrationPath: 'templates/t5/c0.jpg' }] })
+
+      expect(res.status).toBe(200)
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('templates/t5/c0.jpg')
+    })
+
+    it("rejects a foreign private photos/ key (no signed-URL leak)", async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '咖啡店', illustrationPath: 'photos/u999/secret.jpg' }] })
+
+      expect(res.status).toBe(200)
+      // The foreign private key must not be stored, so it can never be signed.
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('')
+      expect(res.body.data[0].illustrationUrl).toBeUndefined()
+    })
+
+    it('rejects a path-traversal illustration key without breaking the response', async () => {
+      const db = (await import('../src/db/database')).getDb()
+      const { token } = createTestUser()
+      const created = await request(app)
+        .post('/api/boards')
+        .set('Authorization', authHeader(token))
+        .send({ gridSize: 3 })
+      const boardId = created.body.data.id
+
+      const res = await request(app)
+        .put(`/api/boards/${boardId}/cells`)
+        .set('Authorization', authHeader(token))
+        .send({ cells: [{ position: 0, title: '老建筑', illustrationPath: 'illustrations/../../etc/passwd' }] })
+
+      expect(res.status).toBe(200)
+      const row = db.prepare('SELECT illustration_path FROM cells WHERE board_id = ? AND position = 0')
+        .get(boardId) as { illustration_path: string }
+      expect(row.illustration_path).toBe('')
+    })
+
     it('returns 404 for non-existent board', async () => {
       const { token } = createTestUser()
       const res = await request(app)

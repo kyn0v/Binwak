@@ -100,6 +100,36 @@ function extractStorageKey(pathOrUrl: string): string {
   return value
 }
 
+/**
+ * Sanitize a client-supplied illustration storage key before persisting it.
+ *
+ * A cell illustration legitimately lives in one of two *shareable* namespaces:
+ *  - `illustrations/...` (seeded defaults, user uploads, template-derived copies)
+ *  - `templates/...`     (public template snapshots used to seed starter boards)
+ *
+ * The value is client-controlled and is later handed to `storage.getImageUrl()`,
+ * which signs arbitrary object keys on the OSS driver. Without this guard a user
+ * could store another user's *private* key (e.g. `photos/u{otherId}/...`) and
+ * receive a signed URL for an object they don't own. We also reject path
+ * traversal / malformed keys so a bad value can't break the owner's own board
+ * fetch later.
+ *
+ * Returns the clean key when allowed, or '' (no illustration) otherwise.
+ */
+function sanitizeIllustrationKey(value: string): string {
+  const key = extractStorageKey(value || '')
+  if (!key) return ''
+  try {
+    validateStorageKey(key)
+  } catch {
+    return ''
+  }
+  if (key.startsWith('illustrations/') || key.startsWith('templates/')) {
+    return key
+  }
+  return ''
+}
+
 function getBoardCells(db: ReturnType<typeof getDb>, boardId: number): Cell[] {
   const storage = getStorage()
   const rows = db
@@ -714,7 +744,7 @@ router.put('/:id/cells', async (req: Request, res: Response): Promise<void> => {
       const completed = cell.completed ? 1 : 0
       let illustPath: string
       if (cell.illustrationPath !== undefined) {
-        illustPath = extractStorageKey(cell.illustrationPath || '')
+        illustPath = sanitizeIllustrationKey(cell.illustrationPath || '')
       } else {
         const existing = selectCell.get(boardId, cell.position) as
           | { title: string; illustration_path: string }
