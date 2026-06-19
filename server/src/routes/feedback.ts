@@ -106,7 +106,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     body: JSON.stringify({
       title: `${prefix} ${title.trim()}`,
       body: body + `\n\n---\nSubmitted by: ${nickname}`,
-      labels: [type, `user:${nickname}`],
+      labels: [type, `uid:${req.user!.userId}`],
     }),
   })
 
@@ -126,17 +126,15 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 })
 
 router.get('/mine', authMiddleware, async (req: Request, res: Response) => {
-  const db = getDb()
-  const userRow = db.prepare('SELECT nickname FROM users WHERE id = ?').get(req.user!.userId) as { nickname: string } | undefined
-  const nickname = userRow?.nickname || '匿名用户'
-
   const { token, repo } = config.github
   if (!token || !repo) {
     res.status(500).json({ success: false, error: '服务器未配置 GitHub 反馈仓库' })
     return
   }
 
-  const q = `repo:${repo} label:"user:${nickname}" is:issue`
+  // Look up by immutable user id, not the mutable nickname: a reclaimed
+  // nickname must never surface a previous owner's feedback issues.
+  const q = `repo:${repo} label:"uid:${req.user!.userId}" is:issue`
   const ghRes = await fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=created&order=desc&per_page=20`, {
     headers: {
       'Authorization': `Bearer ${token}`,
