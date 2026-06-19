@@ -1,0 +1,36 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      npm_and_yarn:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /admin
+    schedule:
+      interval: weekly
+    groups:
+      npm_and_yarn:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    groups:
+      npm_and_yarn:
+        patterns:
+          - "*"
+    ignore:
+      # @dcloudio/vite-plugin-uni pins peer vite@5.2.8 exactly, so any vite
+      # major/minor bump breaks `npm ci` with ERESOLVE. Pin vite here until
+      # uni-app supports a newer Vite.
+      - dependency-name: vite
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
