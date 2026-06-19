@@ -395,7 +395,7 @@ router.get('/wordbank', (req: Request, res: Response): void => {
   const illustMap: Record<string, string> = {}
   for (const r of illustRows) {
     if (!illustMap[r.word]) {
-      illustMap[r.word] = storageDriver.getUrl(r.image_path)
+      illustMap[r.word] = storageDriver.getImageUrl(r.image_path)
     }
   }
 
@@ -838,7 +838,7 @@ router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), asyn
     await storageDriver.delete(existing.image_path).catch(() => {})
   }
 
-  const url = storageDriver.getUrl(illustKey)
+  const url = storageDriver.getImageUrl(illustKey)
   res.json({ success: true, data: { illustrationUrl: url } } as ApiResponse)
 })
 

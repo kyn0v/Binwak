@@ -6,7 +6,6 @@ import { authMiddleware } from '../middleware/auth'
 import { getStorage, validateStorageKey } from '../services/storage'
 import { checkText } from '../services/moderation'
 import { validateIdParam, isValidTheme, CELL_TITLE_MAX_LEN } from '../middleware/validate'
-import type { AppChannel } from '../middleware/channel'
 import type {
   Board,
   Cell,
@@ -101,7 +100,7 @@ function extractStorageKey(pathOrUrl: string): string {
   return value
 }
 
-function getBoardCells(db: ReturnType<typeof getDb>, boardId: number, channel: AppChannel = 'stable'): Cell[] {
+function getBoardCells(db: ReturnType<typeof getDb>, boardId: number): Cell[] {
   const storage = getStorage()
   const rows = db
     .prepare('SELECT position, title, image_name, illustration_path, completed, completed_at FROM cells WHERE board_id = ? ORDER BY position')
@@ -122,11 +121,11 @@ function getBoardCells(db: ReturnType<typeof getDb>, boardId: number, channel: A
       title: r.title,
       imageName: r.image_name,
       imageUrl: r.image_name
-        ? (channel === 'beta' ? storage.getPresignedUrl(r.image_name, 3600) : storage.getUrl(r.image_name))
+        ? storage.getImageUrl(r.image_name)
         : undefined,
       illustrationPath: illustKey || undefined,
       illustrationUrl: illustKey
-        ? (channel === 'beta' ? storage.getPresignedUrl(illustKey, 3600) : storage.getUrl(illustKey))
+        ? storage.getImageUrl(illustKey)
         : undefined,
       completed: r.completed === 1,
       completedAt: r.completed_at || undefined,
@@ -239,7 +238,7 @@ router.post('/', (req: Request, res: Response): void => {
 
   // Return full board
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(boardId)
-  const cells = getBoardCells(db, boardId, req.appChannel)
+  const cells = getBoardCells(db, boardId)
   const detail: BoardDetail = { ...boardRowToBoard(board), cells }
 
   res.status(201).json({ success: true, data: detail } as ApiResponse<BoardDetail>)
@@ -259,7 +258,7 @@ router.get('/:id', (req: Request, res: Response): void => {
     return
   }
 
-  const cells = getBoardCells(db, board.id, req.appChannel)
+  const cells = getBoardCells(db, board.id)
   const detail: BoardDetail = { ...boardRowToBoard(board), cells }
 
   res.json({ success: true, data: detail } as ApiResponse<BoardDetail>)
@@ -288,7 +287,7 @@ router.post('/:id/activate', (req: Request, res: Response): void => {
   })
   switchBoard()
 
-  const cells = getBoardCells(db, boardId, req.appChannel)
+  const cells = getBoardCells(db, boardId)
   const updated = db.prepare('SELECT * FROM boards WHERE id = ?').get(boardId)
   const detail: BoardDetail = { ...boardRowToBoard(updated), cells }
 
@@ -386,7 +385,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 
   // Return updated board
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(boardId)
-  const cells = getBoardCells(db, boardId, req.appChannel)
+  const cells = getBoardCells(db, boardId)
   const detail: BoardDetail = { ...boardRowToBoard(board), cells }
 
   res.json({ success: true, data: detail } as ApiResponse<BoardDetail>)
@@ -595,7 +594,7 @@ router.post('/:id/clone', async (req: Request, res: Response): Promise<void> => 
   }
 
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(newBoardId)
-  const cells = getBoardCells(db, newBoardId, req.appChannel)
+  const cells = getBoardCells(db, newBoardId)
   const detail: BoardDetail = {
     ...boardRowToBoard(board),
     completedCount: countCompletedCells(db, newBoardId),
@@ -710,7 +709,7 @@ router.put('/:id/cells', async (req: Request, res: Response): Promise<void> => {
   // Update board timestamp
   db.prepare('UPDATE boards SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(boardId)
 
-  const updatedCells = getBoardCells(db, boardId, req.appChannel)
+  const updatedCells = getBoardCells(db, boardId)
   res.json({ success: true, data: updatedCells } as ApiResponse<Cell[]>)
 })
 

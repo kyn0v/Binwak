@@ -37,6 +37,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet } from '@/utils/safeStorage'
+import { navBarHeight, capsuleRightRpx as calcCapsuleRightRpx, tabbarHeight as calcTabbarHeight, tabWidths } from '@/utils/layout'
 import IndexTab from '../index/index.vue'
 import PlazaTab from '../plaza/plaza.vue'
 import ProfileTab from '../profile/profile.vue'
@@ -98,23 +99,15 @@ onMounted(() => {
     const windowInfo = uni.getWindowInfo()
     const { statusBarHeight: statusBar = 0 } = windowInfo as any
     const menuBtn = uni.getMenuButtonBoundingClientRect()
-    const toolbarHeight = menuBtn.height + (menuBtn.top - statusBar) * 2
-    statusBarHeight.value = statusBar + toolbarHeight
+    statusBarHeight.value = navBarHeight(statusBar, menuBtn)
     capsuleTop.value = menuBtn.top
-    const rightPx = Math.max(windowInfo.windowWidth - menuBtn.right, 0)
-    capsuleRightRpx.value = rightPx * (750 / windowInfo.windowWidth)
+    capsuleRightRpx.value = calcCapsuleRightRpx(windowInfo.windowWidth, menuBtn)
     safeAreaBottom.value = windowInfo.safeAreaInsets?.bottom || 0
-    // tabbar: inner height (76rpx ≈ 38px) + padding 16rpx top + 16rpx bottom ≈ 54px + safe area
-    const rpxRatio = windowInfo.windowWidth / 750
-    const innerPx = Math.ceil(76 * rpxRatio) + Math.ceil(32 * rpxRatio)
-    tabbarHeight.value = innerPx + safeAreaBottom.value
-    const screenWidth = windowInfo.windowWidth
-    const padding = 24
-    const availableWidth = screenWidth - padding * 2
-    const n = tabs.length
-    const unit = availableWidth / (n + 0.5)
-    normalWidth.value = Math.floor(unit)
-    activeWidth.value = Math.floor(unit * 1.5)
+    // tabbar: inner height (76rpx) + padding (16rpx top + 16rpx bottom) scaled + safe area
+    tabbarHeight.value = calcTabbarHeight(windowInfo.windowWidth, safeAreaBottom.value)
+    const widths = tabWidths(windowInfo.windowWidth, tabs.length)
+    normalWidth.value = widths.normalWidth
+    activeWidth.value = widths.activeWidth
   } catch {
     safeAreaBottom.value = 0
     tabbarHeight.value = 120

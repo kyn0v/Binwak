@@ -319,15 +319,13 @@ const showBackToTop = ref(false)
 const scrollTopVal = ref(0)
 let lastScrollTop = 0
 
-// Dynamic scroll-view height
-const scrollViewHeight = ref(500) // kept for compatibility, now unused
-const PLAZA_HEADER_CONTENT_PX = 279
+// Dynamic layout: constants below are initial estimates only; the real
+// positions are measured at runtime via boundingClientRect() in onMounted.
 const CATEGORY_BAR_PX = 40
 const SORT_BAR_PX = 44
-const TAB_BAR_PX = 60
-// categoryBottom derived from headerBottom + fixed category height (not measured)
 const headerBottom = ref(props.capsuleTop + 185)
-const categoryBottom = computed(() => (headerBottom.value - 12) + CATEGORY_BAR_PX)
+// Initial estimate; corrected by measuring .category-tabs-fixed after mount.
+const categoryBottom = ref((props.capsuleTop + 185 - 12) + CATEGORY_BAR_PX)
 const sortBarBottom_ = ref(categoryBottom.value + SORT_BAR_PX)
 const windowHeight = ref(750)
 const tabbarTop = ref(windowHeight.value - props.tabbarHeight)
@@ -573,6 +571,7 @@ onMounted(() => {
         const measuredHeaderBottom = res[0].bottom as number
         if (measuredHeaderBottom > 0) {
           headerBottom.value = measuredHeaderBottom
+          categoryBottom.value = (headerBottom.value - 12) + CATEGORY_BAR_PX
         }
         windowHeight.value = res[1].height || 750
         tabbarTop.value = windowHeight.value - props.tabbarHeight
@@ -585,7 +584,11 @@ onMounted(() => {
         const q2 = uni.createSelectorQuery()
         q2.select('.sort-bar-fixed').boundingClientRect()
         q2.select('.custom-tabbar').boundingClientRect()
+        q2.select('.category-tabs-fixed').boundingClientRect()
         q2.exec((res2) => {
+          if (res2?.[2]?.bottom > 0) {
+            categoryBottom.value = res2[2].bottom as number
+          }
           if (res2?.[0]?.bottom > 0) {
             sortBarBottom_.value = res2[0].bottom as number
           }

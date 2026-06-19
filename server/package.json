@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "postbuild": "mkdir -p dist/server/src/db && cp src/db/schema.sql dist/server/src/db/ && if [ -d ../admin/dist ]; then mkdir -p dist/admin && cp -r ../admin/dist dist/admin/; fi",
+    "postbuild": "mkdir -p dist/server/src/db/migrations && cp src/db/schema.sql dist/server/src/db/ && cp src/db/migrations/*.sql dist/server/src/db/migrations/ && if [ -d ../admin/dist ]; then mkdir -p dist/admin && cp -r ../admin/dist dist/admin/; fi",
     "start": "node dist/server/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest"

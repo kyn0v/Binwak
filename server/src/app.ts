@@ -8,7 +8,6 @@ import { config } from './config'
 import { getDb } from './db/database'
 import { errorHandler } from './middleware/errorHandler'
 import { traceIdMiddleware } from './middleware/traceId'
-import { channelMiddleware } from './middleware/channel'
 import authRoutes from './routes/auth'
 import boardRoutes from './routes/boards'
 import wordBankRoutes from './routes/wordbank'
@@ -84,9 +83,6 @@ export function createApp() {
 
   app.use(express.json({ limit: '100kb' }))
   app.use(express.urlencoded({ extended: true, limit: '100kb' }))
-
-  // Channel detection: attaches req.appChannel ('stable' | 'beta')
-  app.use(channelMiddleware)
 
   // Static files: uploaded images
   app.use('/uploads', express.static(config.uploadDir))

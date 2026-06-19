@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev:local": "bash scripts/dev-local.sh",
     "client:dev": "cd client && npm run dev:mp-weixin",
     "client:build": "cd client && npm run build:mp-weixin",
     "server:dev": "cd server && npm run dev",

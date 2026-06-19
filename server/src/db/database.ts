@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import fs from 'fs'
 import path from 'path'
 import { config } from '../config'
+import { runMigrations } from './migrate'
 
 let db: Database.Database
 
@@ -42,22 +43,31 @@ function initDb(database: Database.Database) {
   database.pragma('busy_timeout = 5000')
   database.pragma('foreign_keys = ON')
 
-  // Run schema creation
+  // Two complementary mechanisms keep every database (yours, a teammate's, the
+  // test DBs, production) at the correct structure:
+  //
+  // 1. schema.sql — creates the BASE tables. `CREATE TABLE IF NOT EXISTS` means
+  //    a brand-new DB gets all tables, while an existing DB is left untouched.
+  //
+  // 2. runMigrations — applies structural CHANGES made after the base schema
+  //    (e.g. "add column X"). Each migration runs once per database and is
+  //    recorded, so it executes on first startup of a fresh DB and is skipped
+  //    forever after.
+  //
+  // Why both, and why migrations matter even though "the DB is already
+  // designed": once there is data you cannot wipe (real users in production,
+  // or any long-lived DB), you can't just edit schema.sql and recreate the DB —
+  // that would lose the data. Migrations let you evolve an existing DB in place
+  // without data loss. Pre-launch you could fold columns into schema.sql, but
+  // keeping migrations now means post-launch schema changes are a one-file add
+  // with zero risk.
   const schema = fs.readFileSync(
     path.resolve(__dirname, 'schema.sql'),
     'utf-8'
   )
   database.exec(schema)
 
-  // Incremental migrations: add new columns (ignore if already exist)
-  const migrations: string[] = [
-    "ALTER TABLE users ADD COLUMN kind TEXT NOT NULL DEFAULT 'wechat'",
-    "ALTER TABLE users ADD COLUMN image_storage TEXT NOT NULL DEFAULT 'local'",
-    "ALTER TABLE template_cells ADD COLUMN image_path TEXT DEFAULT ''",
-  ]
-  for (const sql of migrations) {
-    try { database.exec(sql) } catch {}
-  }
+  runMigrations(database)
 
   ensureSystemAdminUser(database)
 }

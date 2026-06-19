@@ -12,9 +12,8 @@ import path from 'path'
 import { config } from '../config'
 
 export interface StorageResult {
-  /** Public-facing URL or path */
-  url: string
-  /** Storage key (filename for local, object key for OSS) */
+  /** Storage key (filename for local, object key for OSS). Build display URLs
+   *  via getImageUrl(key) — never store a plain URL (private bucket needs signing). */
   key: string
 }
 
@@ -25,9 +24,15 @@ export interface StorageDriver {
   /** Copy an object to a new key */
   copy(srcKey: string, destKey: string): Promise<void>
   delete(key: string): Promise<void>
-  getUrl(key: string): string
-  /** Generate a time-limited signed URL for private object access. Falls back to getUrl for local driver. */
-  getPresignedUrl(key: string, expiresSeconds?: number): string
+  /**
+   * URL the client can use to display a stored image. The driver decides
+   * whether signing is needed (OSS always signs since photos are private;
+   * local returns a plain path), so callers never deal with bucket visibility.
+   * This is the ONLY public way to obtain a URL — drivers keep their plain /
+   * signed URL builders private so callers can't accidentally leak an
+   * unsigned URL for a private object.
+   */
+  getImageUrl(key: string): string
 }
 
 /**
@@ -62,7 +67,6 @@ class LocalDriver implements StorageDriver {
       await fs.promises.rename(filePath, targetPath)
     }
     return {
-      url: this.getUrl(fileName),
       key: fileName,
     }
   }
@@ -76,7 +80,6 @@ class LocalDriver implements StorageDriver {
       await fs.promises.rename(filePath, targetPath)
     }
     return {
-      url: this.getUrl(objectKey),
       key: objectKey,
     }
   }
@@ -100,13 +103,12 @@ class LocalDriver implements StorageDriver {
     await fs.promises.copyFile(srcPath, destPath)
   }
 
-  getUrl(key: string): string {
+  private getUrl(key: string): string {
     return `/uploads/${key}`
   }
 
-  // Local driver has no signing; return plain URL as fallback
-  getPresignedUrl(key: string, _expiresSeconds = 3600): string {
-    validateStorageKey(key)
+  // Local files are always served as plain paths.
+  getImageUrl(key: string): string {
     return this.getUrl(key)
   }
 }
@@ -148,7 +150,6 @@ class OSSDriver implements StorageDriver {
     fs.unlink(filePath, () => {})
 
     return {
-      url: this.getUrl(objectKey),
       key: objectKey,
     }
   }
@@ -159,7 +160,6 @@ class OSSDriver implements StorageDriver {
     await client.put(objectKey, filePath, { headers: OSSDriver.UPLOAD_HEADERS })
     fs.unlink(filePath, () => {})
     return {
-      url: this.getUrl(objectKey),
       key: objectKey,
     }
   }
@@ -181,7 +181,7 @@ class OSSDriver implements StorageDriver {
     await client.copy(destKey, srcKey)
   }
 
-  getUrl(key: string): string {
+  private getUrl(key: string): string {
     validateStorageKey(key)
     if (config.storage.oss.cdnDomain) {
       return `https://${config.storage.oss.cdnDomain}/${key}`
@@ -189,12 +189,18 @@ class OSSDriver implements StorageDriver {
     return `https://${config.storage.oss.bucket}.${config.storage.oss.region}.aliyuncs.com/${key}`
   }
 
-  getPresignedUrl(key: string, expiresSeconds = 3600): string {
+  private getPresignedUrl(key: string, expiresSeconds = 3600): string {
     validateStorageKey(key)
     const client = this.getClient()
     // ali-oss signatureUrl ignores `secure` option in some versions, so we force https manually
     const url = client.signatureUrl(key, { expires: expiresSeconds })
     return url.replace(/^http:\/\//, 'https://')
+  }
+
+  // Uploaded photos are private user content, so view URLs are always
+  // time-limited signed URLs.
+  getImageUrl(key: string): string {
+    return this.getPresignedUrl(key, 3600)
   }
 }
 

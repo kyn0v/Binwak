@@ -23,7 +23,6 @@ import type {
 
 // API base URL is configured via env vars (see .env and .env.production)
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-const APP_CHANNEL = import.meta.env.VITE_APP_CHANNEL || 'stable'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { REQUEST_TIMEOUT } from '@/config/limits'
 import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
@@ -184,7 +183,6 @@ async function _doRequest<T>(opts: RequestOptions, allowRetry: boolean): Promise
   const traceId = generateTraceId()
   const header: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-App-Channel': APP_CHANNEL,
     'X-Trace-Id': traceId,
   }
 
@@ -536,9 +534,7 @@ export async function uploadImage(filePath: string, boardId?: number, position?:
 /** Internal upload executor with 401 retry support */
 function _doUpload(filePath: string, boardId?: number, position?: number, allowRetry = true): Promise<UploadResponse> {
   const token = getToken()
-  const header: Record<string, string> = {
-    'X-App-Channel': APP_CHANNEL,
-  }
+  const header: Record<string, string> = {}
   if (token) header.Authorization = `Bearer ${token}`
 
   return new Promise((resolve, reject) => {
@@ -727,9 +723,7 @@ export function uploadIllustration(filePath: string, word: string): Promise<Illu
 
 function _doIllustUpload(filePath: string, word: string, allowRetry = true): Promise<Illustration> {
   const token = getToken()
-  const header: Record<string, string> = {
-    'X-App-Channel': APP_CHANNEL,
-  }
+  const header: Record<string, string> = {}
   if (token) header.Authorization = `Bearer ${token}`
 
   return new Promise((resolve, reject) => {

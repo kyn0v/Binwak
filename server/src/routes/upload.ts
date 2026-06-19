@@ -42,7 +42,7 @@ router.get('/presigned', async (req: Request, res: Response): Promise<void> => {
   }
 
   const storageDriver = getStorage()
-  const url = storageDriver.getPresignedUrl(key, 3600)
+  const url = storageDriver.getImageUrl(key)
   res.json({ success: true, data: { url } } as ApiResponse<{ url: string }>)
 })
 
@@ -140,7 +140,11 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
 
   await cleanupFiles(preparedImage.cleanupPaths)
 
-  const { url, key } = storageResult
+  const { key } = storageResult
+  // Always expose a viewable (signed for private OSS) URL — both the WeChat
+  // moderation fetch below and the client preview need a URL that actually
+  // resolves against a private bucket.
+  const url = storageDriver.getImageUrl(key)
 
   /** Helper: delete uploaded file on failure */
   const removeUploadedFile = async () => {

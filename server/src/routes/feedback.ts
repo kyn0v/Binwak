@@ -15,7 +15,7 @@ const VALID_TYPES = new Set(['bug', 'feature'])
 
 function resolveImageUrls(imageKeys: string[]): string[] {
   const storage = getStorage()
-  return imageKeys.map(k => storage.getUrl(k))
+  return imageKeys.map(k => storage.getImageUrl(k))
 }
 
 function validateFeedbackImageKeys(images: unknown, userId: number): { imageList?: string[]; error?: string } {
