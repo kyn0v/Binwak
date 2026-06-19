@@ -3,7 +3,6 @@
  *
  * All routes (except /login) are protected by adminAuthMiddleware.
  */
-import multer from 'multer'
 import { Router, Request, Response } from 'express'
 import fs from 'fs'
 import path from 'path'
@@ -12,6 +11,7 @@ import { ensureSystemAdminUser, getDb } from '../db/database'
 import { getStorage } from '../services/storage'
 import { config } from '../config'
 import { prepareImageForStorage, cleanupFiles } from '../services/imageProcessing'
+import { imageMulter, upsertIllustration, deleteStorageObjectQuietly } from '../services/imageUpload'
 import {
   adminAuthMiddleware,
   getAdminCredentials,
@@ -21,7 +21,7 @@ import {
 import type { ApiResponse } from '../../../shared/types'
 import { validateIdParam } from '../middleware/validate'
 import { validateWebhookUrl } from '../utils/urlSafety'
-import { copyIllustrationsToTemplate } from './templates'
+import { copyIllustrationsToTemplate } from '../services/templateSnapshot'
 
 const router = Router()
 
@@ -738,38 +738,7 @@ router.post('/templates', async (req: Request, res: Response): Promise<void> => 
 
 // ── Admin illustration upload ──
 
-const illustStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    if (!fs.existsSync(config.uploadDir)) {
-      fs.mkdirSync(config.uploadDir, { recursive: true })
-    }
-    cb(null, config.uploadDir)
-  },
-  filename: (_req, file, cb) => {
-    const mimeToExt: Record<string, string> = {
-      'image/jpeg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'image/gif': '.gif',
-    }
-    const ext = mimeToExt[file.mimetype] || '.jpg'
-    const randomId = crypto.randomBytes(16).toString('hex')
-    cb(null, `${randomId}${ext}`)
-  },
-})
-
-const illustUpload = multer({
-  storage: illustStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true)
-    } else {
-      cb(new Error('只支持 JPG/PNG/WebP/GIF 格式'))
-    }
-  },
-})
+const illustUpload = imageMulter({ maxBytes: 5 * 1024 * 1024 })
 
 // POST /api/admin/wordbank/:wordId/illustration - upload illustration for a word
 router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
@@ -816,26 +785,18 @@ router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), asyn
   await cleanupFiles(preparedImage.cleanupPaths)
 
   // Replace DB reference first; delete the old object only after the DB update.
-  const existing = db.prepare(
-    'SELECT image_path FROM illustrations WHERE word = ? AND user_id = ?'
-  ).get(wordRow.word, adminUserId) as { image_path: string } | undefined
-
+  let previousKey: string | null
   try {
-    // Upsert illustration
-    db.prepare(`
-      INSERT INTO illustrations (word, user_id, image_path)
-      VALUES (?, ?, ?)
-      ON CONFLICT(word, user_id) DO UPDATE SET image_path = excluded.image_path
-    `).run(wordRow.word, adminUserId, illustKey)
+    ;({ previousKey } = upsertIllustration(db, wordRow.word, adminUserId, illustKey))
   } catch (err) {
-    await storageDriver.delete(illustKey).catch(() => {})
+    await deleteStorageObjectQuietly(storageDriver, illustKey)
     console.error('[Admin] Illustration DB save error:', err)
     res.status(500).json({ success: false, error: '保存插画记录失败' } as ApiResponse)
     return
   }
 
-  if (existing) {
-    await storageDriver.delete(existing.image_path).catch(() => {})
+  if (previousKey) {
+    await deleteStorageObjectQuietly(storageDriver, previousKey)
   }
 
   const url = storageDriver.getImageUrl(illustKey)

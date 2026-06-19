@@ -1,14 +1,12 @@
 import { Router, Request, Response } from 'express'
-import multer from 'multer'
-import crypto from 'crypto'
 import path from 'path'
-import fs from 'fs'
 import { config } from '../config'
 import { getDb } from '../db/database'
 import { authMiddleware } from '../middleware/auth'
 import { getStorage, validateStorageKey } from '../services/storage'
 import { checkImage, checkImageSync } from '../services/moderation'
 import { prepareImageForStorage, cleanupFiles } from '../services/imageProcessing'
+import { imageMulter } from '../services/imageUpload'
 import type { UploadResponse, ApiResponse } from '../../../shared/types'
 
 const router = Router()
@@ -47,43 +45,7 @@ router.get('/presigned', async (req: Request, res: Response): Promise<void> => {
 })
 
 // Multer storage (always save locally first; OSS mode uploads then deletes local)
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    // Ensure upload directory exists
-    if (!fs.existsSync(config.uploadDir)) {
-      fs.mkdirSync(config.uploadDir, { recursive: true })
-    }
-    cb(null, config.uploadDir)
-  },
-  filename: (_req, file, cb) => {
-    // Use safe extension based on MIME type, ignore client-provided extension
-    const mimeToExt: Record<string, string> = {
-      'image/jpeg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'image/gif': '.gif',
-    }
-    const ext = mimeToExt[file.mimetype] || '.jpg'
-    const randomId = crypto.randomBytes(16).toString('hex')
-    const fileName = `${randomId}${ext}`
-    cb(null, fileName)
-  },
-})
-
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024,
-  },
-  fileFilter: (_req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true)
-    } else {
-      cb(new Error('只支持 JPG/PNG/WebP/GIF 格式'))
-    }
-  },
-})
+const upload = imageMulter({ maxBytes: 10 * 1024 * 1024 })
 
 /**
  * POST /api/upload
