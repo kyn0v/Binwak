@@ -16,6 +16,7 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
+import crypto from 'crypto'
 import { config } from '../config'
 
 export interface AdminPayload {
@@ -77,8 +78,6 @@ export async function verifyAdminPassword(input: string, creds: AdminCredentials
   }
   return false
 }
-
-import crypto from 'crypto'
 
 export function generateAdminToken(username: string): string {
   return jwt.sign(

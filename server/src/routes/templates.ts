@@ -7,6 +7,7 @@ import { authMiddleware, optionalAuth, AuthRequest } from '../middleware/auth'
 import { getStorage } from '../services/storage'
 import { validateIdParam, isValidCategory, escapeLikePattern, CELL_TITLE_MAX_LEN } from '../middleware/validate'
 import { checkText } from '../services/moderation'
+import { copyIllustrationsToTemplate } from '../services/templateSnapshot'
 import type { Template, TemplateListItem, CreateTemplateRequest, TemplateCategory, ApiResponse } from '../../../shared/types'
 
 const router = Router()
@@ -62,59 +63,6 @@ function saveTemplateCells(db: ReturnType<typeof getDb>, templateId: number, cel
   const insertCell = db.prepare('INSERT INTO template_cells (template_id, position, title, image_path) VALUES (?, ?, ?, ?)')
   for (const cell of cells) {
     insertCell.run(templateId, cell.position, cell.title || '', cell.image_path || '')
-  }
-}
-
-export async function deleteTemplateSnapshotFiles(db: ReturnType<typeof getDb>, templateId: number) {
-  const rows = db.prepare(
-    "SELECT image_path FROM template_cells WHERE template_id = ? AND image_path != ''"
-  ).all(templateId) as Array<{ image_path: string }>
-  if (rows.length === 0) return
-
-  const storage = getStorage()
-  const uniqueKeys = [...new Set(rows.map(r => r.image_path).filter(Boolean))]
-  for (const key of uniqueKeys) {
-    try { await storage.delete(key) } catch { /* ignore cleanup failures */ }
-  }
-}
-
-// ── Helper: copy author's illustrations into template_cells as snapshots ──
-export async function copyIllustrationsToTemplate(db: ReturnType<typeof getDb>, templateId: number, authorId: number, words: string[]) {
-  const uniqueWords = [...new Set(words.filter(Boolean))]
-  if (uniqueWords.length === 0) return
-
-  const placeholders = uniqueWords.map(() => '?').join(',')
-  const rows = db.prepare(
-    `SELECT word, image_path FROM illustrations WHERE user_id = ? AND word IN (${placeholders})`
-  ).all(authorId, ...uniqueWords) as Array<{ word: string; image_path: string }>
-
-  if (rows.length === 0) return
-
-  const illustMap = new Map(rows.map(r => [r.word, r.image_path]))
-  const storage = getStorage()
-  const updateStmt = db.prepare('UPDATE template_cells SET image_path = ? WHERE template_id = ? AND position = ?')
-
-  // Build position -> word mapping from template_cells
-  const cellRows = db.prepare(
-    'SELECT position, title FROM template_cells WHERE template_id = ?'
-  ).all(templateId) as Array<{ position: number; title: string }>
-
-  for (const cell of cellRows) {
-    const srcPath = illustMap.get(cell.title)
-    if (!srcPath) continue
-    try {
-      const ext = srcPath.split('.').pop() || 'jpg'
-      const destKey = `templates/t${templateId}/c${cell.position}.${ext}`
-      await storage.copy(srcPath, destKey)
-      try {
-        updateStmt.run(destKey, templateId, cell.position)
-      } catch (err) {
-        await storage.delete(destKey).catch(() => {})
-        throw err
-      }
-    } catch (err) {
-      console.error(`[Template] Failed to copy illustration for position ${cell.position}:`, err)
-    }
   }
 }
 

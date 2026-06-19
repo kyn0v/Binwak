@@ -1,52 +1,19 @@
 import { Router, Request, Response } from 'express'
-import multer from 'multer'
-import crypto from 'crypto'
 import path from 'path'
-import fs from 'fs'
 import { config } from '../config'
 import { getDb } from '../db/database'
 import { authMiddleware } from '../middleware/auth'
 import { getStorage } from '../services/storage'
 import { checkImageSync } from '../services/moderation'
 import { prepareImageForStorage, cleanupFiles } from '../services/imageProcessing'
+import { imageMulter, upsertIllustration, deleteStorageObjectQuietly } from '../services/imageUpload'
 import type { ApiResponse, Illustration } from '../../../shared/types'
 
 const router = Router()
 router.use(authMiddleware)
 
-// ── multer config (same as upload.ts) ──
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    if (!fs.existsSync(config.uploadDir)) {
-      fs.mkdirSync(config.uploadDir, { recursive: true })
-    }
-    cb(null, config.uploadDir)
-  },
-  filename: (_req, file, cb) => {
-    const mimeToExt: Record<string, string> = {
-      'image/jpeg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'image/gif': '.gif',
-    }
-    const ext = mimeToExt[file.mimetype] || '.jpg'
-    const randomId = crypto.randomBytes(16).toString('hex')
-    cb(null, `${randomId}${ext}`)
-  },
-})
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB for illustrations
-  fileFilter: (_req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true)
-    } else {
-      cb(new Error('只支持 JPG/PNG/WebP/GIF 格式'))
-    }
-  },
-})
+// 5MB for illustrations (smaller than user photos)
+const upload = imageMulter({ maxBytes: 5 * 1024 * 1024 })
 
 /**
  * GET /api/illustrations
@@ -175,28 +142,18 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
   const db = getDb()
 
   // Replace DB reference first; delete the old object only after the DB update.
-  const existing = db.prepare(
-    'SELECT image_path FROM illustrations WHERE word = ? AND user_id = ?'
-  ).get(word, userId) as { image_path: string } | undefined
-
+  let previousKey: string | null
   try {
-    // Upsert: insert or replace
-    db.prepare(`
-      INSERT INTO illustrations (word, user_id, image_path)
-      VALUES (?, ?, ?)
-      ON CONFLICT(word, user_id) DO UPDATE SET
-        image_path = excluded.image_path,
-        created_at = CURRENT_TIMESTAMP
-    `).run(word, userId, storageResult.key)
+    ;({ previousKey } = upsertIllustration(db, word, userId, storageResult.key))
   } catch (err) {
-    await storageDriver.delete(storageResult.key).catch(() => {})
+    await deleteStorageObjectQuietly(storageDriver, storageResult.key)
     console.error('[Illustration] DB save error:', err)
     res.status(500).json({ success: false, error: '保存插画记录失败' } as ApiResponse)
     return
   }
 
-  if (existing) {
-    await storageDriver.delete(existing.image_path).catch(() => {})
+  if (previousKey) {
+    await deleteStorageObjectQuietly(storageDriver, previousKey)
   }
 
   const row = db.prepare(
