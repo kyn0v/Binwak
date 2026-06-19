@@ -27,10 +27,7 @@ updates:
         patterns:
           - "*"
     ignore:
-      # @dcloudio/vite-plugin-uni pins peer vite@5.2.8 exactly, so any vite
-      # major/minor bump breaks `npm ci` with ERESOLVE. Pin vite here until
-      # uni-app supports a newer Vite.
+      # @dcloudio/vite-plugin-uni pins peer vite to an EXACT version (5.2.8),
+      # so any vite update — including patch — breaks `npm ci` with ERESOLVE.
+      # Pin vite entirely; it can only move when the uni-app toolchain does.
       - dependency-name: vite
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
