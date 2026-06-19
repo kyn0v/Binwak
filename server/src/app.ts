@@ -1,4 +1,8 @@
 import express from 'express'
+// Side-effect import: patches Express 4 so rejected promises from async route
+// handlers are forwarded to the error-handling middleware instead of hanging
+// the request. Must be imported before any router is created.
+import 'express-async-errors'
 import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
