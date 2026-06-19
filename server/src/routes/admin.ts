@@ -167,7 +167,7 @@ router.get('/users', (req: Request, res: Response): void => {
 // ── GET /api/admin/users/:id ── User detail
 router.get('/users/:id', (req: Request, res: Response): void => {
   const db = getDb()
-  const userId = parseInt(req.params.id)
+  const userId = parseInt(req.params.id as string)
   if (!Number.isFinite(userId) || userId < 1) {
     res.status(400).json({ success: false, error: '无效的用户 ID' } as ApiResponse)
     return
@@ -211,7 +211,7 @@ router.get('/users/:id', (req: Request, res: Response): void => {
 // ── GET /api/admin/templates/:id ── Get single template with cells
 router.get('/templates/:id', (req: Request, res: Response): void => {
   const db = getDb()
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id as string)
 
   const tpl = db.prepare(`
     SELECT t.*, u.nickname as authorName
@@ -286,7 +286,7 @@ router.get('/templates', (req: Request, res: Response): void => {
 // ── PATCH /api/admin/templates/:id/pin ── Toggle pin
 router.patch('/templates/:id/pin', (req: Request, res: Response): void => {
   const db = getDb()
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id as string)
 
   const tpl = db.prepare('SELECT id, is_pinned FROM templates WHERE id = ?').get(id) as any
   if (!tpl) {
@@ -303,7 +303,7 @@ router.patch('/templates/:id/pin', (req: Request, res: Response): void => {
 // ── PATCH /api/admin/templates/:id/status ── Change status (active/hidden)
 router.patch('/templates/:id/status', (req: Request, res: Response): void => {
   const db = getDb()
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id as string)
   const { status } = req.body as { status?: string }
 
   if (!status || !['active', 'hidden'].includes(status)) {
@@ -462,7 +462,7 @@ router.delete('/wordbank/:id', (req: Request, res: Response): void => {
   }
 
   const db = getDb()
-  const wordId = parseInt(req.params.id)
+  const wordId = parseInt(req.params.id as string)
   if (isNaN(wordId)) {
     res.status(400).json({ success: false, error: '无效的 ID' } as ApiResponse)
     return
@@ -586,7 +586,7 @@ router.post('/templates/generate', async (req: Request, res: Response): Promise<
 // ── PUT /api/admin/templates/:id ── Update template content
 router.put('/templates/:id', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id as string)
   const { title, description, category, cells } = req.body as {
     title?: string
     description?: string
@@ -652,7 +652,7 @@ router.put('/templates/:id', async (req: Request, res: Response): Promise<void> 
 // ── DELETE /api/admin/templates/:id ── Hard delete template
 router.delete('/templates/:id', async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
-  const id = parseInt(req.params.id)
+  const id = parseInt(req.params.id as string)
 
   const tpl = db.prepare('SELECT id FROM templates WHERE id = ?').get(id) as any
   if (!tpl) {
@@ -754,7 +754,7 @@ router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), asyn
   }
 
   const db = getDb()
-  const wordId = parseInt(req.params.wordId)
+  const wordId = parseInt(req.params.wordId as string)
   const wordRow = db.prepare('SELECT word FROM word_banks WHERE id = ? AND user_id = ?').get(wordId, adminUserId) as { word: string } | undefined
   if (!wordRow) {
     res.status(404).json({ success: false, error: '词语不存在' } as ApiResponse)

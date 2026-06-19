@@ -1,8 +1,4 @@
 import express from 'express'
-// Side-effect import: patches Express 4 so rejected promises from async route
-// handlers are forwarded to the error-handling middleware instead of hanging
-// the request. Must be imported before any router is created.
-import 'express-async-errors'
 import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
@@ -155,8 +151,9 @@ export function createApp() {
   // ---------- Admin SPA ----------
   const adminDistDir = path.resolve(__dirname, '../../admin/dist')
   app.use('/admin', express.static(adminDistDir))
-  // SPA fallback: any /admin/* route serves index.html
-  app.get('/admin/*', (_req, res) => {
+  // SPA fallback: any /admin/* route serves index.html.
+  // Express 5 / path-to-regexp v8 require named wildcards.
+  app.get('/admin/*splat', (_req, res) => {
     res.sendFile(path.join(adminDistDir, 'index.html'))
   })
 

@@ -174,7 +174,7 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
  */
 router.delete('/:id', (req: Request, res: Response): void => {
   const db = getDb()
-  const wordId = parseInt(req.params.id)
+  const wordId = parseInt(req.params.id as string)
   const userId = req.user!.userId
 
   const result = db
