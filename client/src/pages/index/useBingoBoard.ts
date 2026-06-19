@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { DEFAULT_GRID_SIZE, GRID_SIZE_OPTIONS, GRID_SIZE_KEY } from './bingoDefaults'
+import { DEFAULT_GRID_SIZE, GRID_SIZE_OPTIONS, GRID_SIZE_KEY, DEFAULT_WORDS } from './bingoDefaults'
 
 type BingoCell = {
   id: number
@@ -23,7 +23,7 @@ const BOARD_TITLE_KEY = STORAGE_KEYS.BOARD_TITLE
 
 // ── Singleton state (shared across all pages) ─────────────
 const gridSize = ref(DEFAULT_GRID_SIZE)
-const cells = ref<BingoCell[]>(createCells(DEFAULT_GRID_SIZE))
+const cells = ref<BingoCell[]>(createDefaultCells(DEFAULT_GRID_SIZE))
 const boardTitle = ref('')
 const showBingo = ref(false)
 const bingoLineCount = ref(0)
@@ -41,6 +41,21 @@ function createCells(size: number): BingoCell[] {
     id: i,
     title: '',
     completed: false,
+  }))
+}
+
+/**
+ * Create the cells for a brand-new board (no local cache, no remote data),
+ * pre-filling titles from DEFAULT_WORDS so the board is consistent with the
+ * word bank's own DEFAULT_WORDS fallback. Used only on first-launch
+ * initialization — explicit "reset" / "change grid size" still use the empty
+ * createCells(). Fills up to min(cellCount, DEFAULT_WORDS.length); any extra
+ * cells stay blank.
+ */
+function createDefaultCells(size: number): BingoCell[] {
+  return createCells(size).map((cell, i) => ({
+    ...cell,
+    title: DEFAULT_WORDS[i] ?? '',
   }))
 }
 
@@ -138,7 +153,7 @@ export function useBingoBoard() {
       lastSeenLineCount.value = count // don't re-trigger on load
       showBingo.value = false
     } else {
-      cells.value = createCells(gridSize.value)
+      cells.value = createDefaultCells(gridSize.value)
     }
   }
 
@@ -262,4 +277,4 @@ export function useBingoBoard() {
 }
 
 export type { BingoCell, BingoState }
-export { createCells, getBingoLines, sanitizeCells, applyTitlesToCells, GRID_SIZE_OPTIONS, BOARD_TITLE_KEY }
+export { createCells, createDefaultCells, getBingoLines, sanitizeCells, applyTitlesToCells, GRID_SIZE_OPTIONS, BOARD_TITLE_KEY }

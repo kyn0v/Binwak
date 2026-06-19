@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { createCells, getBingoLines, sanitizeCells, applyTitlesToCells } from '../src/pages/index/useBingoBoard'
+import { createCells, createDefaultCells, getBingoLines, sanitizeCells, applyTitlesToCells } from '../src/pages/index/useBingoBoard'
+import { DEFAULT_WORDS } from '../src/pages/index/bingoDefaults'
 import type { BingoCell, BingoState } from '../src/pages/index/useBingoBoard'
 
 // ── createCells ──
@@ -29,6 +30,42 @@ describe('createCells', () => {
     const cells = createCells(1)
     expect(cells).toHaveLength(1)
     expect(cells[0].id).toBe(0)
+  })
+
+  it('createCells 生成空白 title（用于 reset / 改尺寸）', () => {
+    createCells(5).forEach((cell) => expect(cell.title).toBe(''))
+  })
+})
+
+// ── createDefaultCells ──
+
+describe('createDefaultCells', () => {
+  it('用 DEFAULT_WORDS 预填 title，与词库兜底一致', () => {
+    const cells = createDefaultCells(5)
+    expect(cells).toHaveLength(25)
+    // 默认 5×5 = 25 格，DEFAULT_WORDS 恰好 25 个 → 全部填上
+    cells.forEach((cell, i) => {
+      expect(cell.title).toBe(DEFAULT_WORDS[i] ?? '')
+      expect(cell.completed).toBe(false)
+    })
+    expect(cells.every((c) => c.title)).toBe(true)
+  })
+
+  it('格子数多于词数时，多出的格子留空（不越界）', () => {
+    const cells = createDefaultCells(6) // 36 格 > 25 词
+    expect(cells).toHaveLength(36)
+    for (let i = 0; i < DEFAULT_WORDS.length; i++) {
+      expect(cells[i].title).toBe(DEFAULT_WORDS[i])
+    }
+    for (let i = DEFAULT_WORDS.length; i < 36; i++) {
+      expect(cells[i].title).toBe('')
+    }
+  })
+
+  it('格子数少于词数时，只填前 N 个', () => {
+    const cells = createDefaultCells(3) // 9 格 < 25 词
+    expect(cells).toHaveLength(9)
+    cells.forEach((cell, i) => expect(cell.title).toBe(DEFAULT_WORDS[i]))
   })
 })
 
