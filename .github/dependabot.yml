@@ -27,7 +27,17 @@ updates:
         patterns:
           - "*"
     ignore:
-      # @dcloudio/vite-plugin-uni pins peer vite to an EXACT version (5.2.8),
-      # so any vite update — including patch — breaks `npm ci` with ERESOLVE.
-      # Pin vite entirely; it can only move when the uni-app toolchain does.
+      # The uni-app toolchain pins several peers to EXACT versions, so any bump
+      # of these breaks `npm ci` with ERESOLVE/EBADPLATFORM. They can only move
+      # when @dcloudio/* itself does, so let dependabot stop proposing them:
+      #
+      #  - vite: @dcloudio/vite-plugin-uni pins peer vite@5.2.8 exactly.
+      #  - @dcloudio/types: @dcloudio/uni-app pins peer @dcloudio/types@3.4.28.
+      #  - vitest: v4 pulls a nested vite 7 whose esbuild 0.28 foreign-platform
+      #    binaries npm marks "extraneous", breaking `npm ci` on the Linux CI
+      #    runner (EBADPLATFORM). Stay on the vite-5-compatible vitest 3 line.
       - dependency-name: vite
+      - dependency-name: "@dcloudio/types"
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
