@@ -1061,6 +1061,11 @@ async function pickImage(index: number) {
           showMilestone('⚠️', '图片内容不合规，请更换图片')
           return
         }
+        // Any other upload failure (network/timeout/5xx): the server has no
+        // record of this image, so do NOT mark the cell complete with a
+        // local-only path — that would silently lose the photo on reload.
+        showMilestone('⚠️', '图片上传失败，请检查网络后重试')
+        return
       }
     }
 
