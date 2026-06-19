@@ -37,7 +37,7 @@ jobs:
         run: npm --prefix client run test
 
       - name: Build (mp-weixin)
-        run: cd client && npx uni build -p mp-weixin --mode development
+        run: cd client && npx uni build -p mp-weixin --mode production
 
   deploy:
     if: github.event_name == 'push'
@@ -68,8 +68,7 @@ jobs:
       - name: Build mp-weixin
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-          VITE_APP_CHANNEL: beta
-        run: cd client && npx uni build -p mp-weixin --mode development
+        run: cd client && npx uni build -p mp-weixin --mode production
 
       - name: Install miniprogram-ci
         run: cd client && npm install miniprogram-ci --no-save

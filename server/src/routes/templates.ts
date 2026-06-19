@@ -308,12 +308,11 @@ router.get('/:id', optionalAuth, (req: Request, res: Response) => {
   const authorNames = getAuthorNames(db, [row.user_id])
   const rawCells = getTemplateCells(db, templateId)
   const storage = getStorage()
-  const channel = (req as any).appChannel
   const cells = rawCells.map(c => ({
     position: c.position,
     title: c.title,
     imageUrl: c.image_path
-      ? (channel === 'beta' ? storage.getPresignedUrl(c.image_path, 3600) : storage.getUrl(c.image_path))
+      ? storage.getImageUrl(c.image_path)
       : undefined,
   }))
 
@@ -463,7 +462,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const row = db.prepare('SELECT * FROM templates WHERE id = ?').get(templateId) as any
   const savedCells = getTemplateCells(db, templateId)
   const storage = getStorage()
-  const channel = (req as any).appChannel
 
   const template: Template = {
     id: row.id,
@@ -475,7 +473,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       position: c.position,
       title: c.title,
       imageUrl: c.image_path
-        ? (channel === 'beta' ? storage.getPresignedUrl(c.image_path, 3600) : storage.getUrl(c.image_path))
+        ? storage.getImageUrl(c.image_path)
         : undefined,
     })),
     category: row.category || undefined,
@@ -655,7 +653,6 @@ router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) 
   const board = db.prepare('SELECT * FROM boards WHERE id = ?').get(boardId) as any
   const boardCells = db.prepare('SELECT * FROM cells WHERE board_id = ? ORDER BY position').all(boardId) as any[]
   const storage = getStorage()
-  const channel = req.appChannel
 
   res.status(201).json({
     success: true,
@@ -673,11 +670,11 @@ router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) 
         title: c.title,
         imageName: c.image_name,
         imageUrl: c.image_name
-          ? (channel === 'beta' ? storage.getPresignedUrl(c.image_name, 3600) : storage.getUrl(c.image_name))
+          ? storage.getImageUrl(c.image_name)
           : undefined,
         illustrationPath: c.illustration_path || undefined,
         illustrationUrl: c.illustration_path
-          ? (channel === 'beta' ? storage.getPresignedUrl(c.illustration_path, 3600) : storage.getUrl(c.illustration_path))
+          ? storage.getImageUrl(c.illustration_path)
           : undefined,
         completed: !!c.completed,
         completedAt: c.completed_at,

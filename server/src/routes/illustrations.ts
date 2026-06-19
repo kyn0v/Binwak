@@ -55,7 +55,6 @@ const upload = multer({
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const userId = req.user!.userId
   const db = getDb()
-  const channel = req.appChannel
   const storageDriver = getStorage()
 
   const rows = db.prepare(`
@@ -71,9 +70,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     id: r.id,
     word: r.word,
     imagePath: r.image_path,
-    imageUrl: channel === 'beta'
-      ? storageDriver.getPresignedUrl(r.image_path, 3600)
-      : storageDriver.getUrl(r.image_path),
+    imageUrl: storageDriver.getImageUrl(r.image_path),
     createdAt: r.created_at,
   }))
 
@@ -89,7 +86,6 @@ async function matchWords(req: Request, res: Response, words: string[]): Promise
 
   const userId = req.user!.userId
   const db = getDb()
-  const channel = req.appChannel
   const storageDriver = getStorage()
 
   const placeholders = words.map(() => '?').join(',')
@@ -106,9 +102,7 @@ async function matchWords(req: Request, res: Response, words: string[]): Promise
     if (matches[r.word]) continue
     matches[r.word] = {
       illustrationPath: r.image_path,
-      illustrationUrl: channel === 'beta'
-        ? storageDriver.getPresignedUrl(r.image_path, 3600)
-        : storageDriver.getUrl(r.image_path),
+      illustrationUrl: storageDriver.getImageUrl(r.image_path),
     }
   }
 
@@ -213,7 +207,7 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
     id: row.id,
     word: row.word,
     imagePath: row.image_path,
-    imageUrl: storageResult.url,
+    imageUrl: storageDriver.getImageUrl(row.image_path),
     createdAt: row.created_at,
   }
 

@@ -292,6 +292,7 @@ import { favoriteBoard, getTemplates, getBoard, resolveApiUrl, type TemplateList
 import { buildShareCode, copyShareCodeToClipboard } from '../index/shareCode'
 import type { TemplateListItem, Cell } from '../../../../shared/types'
 import { safeSet } from '@/utils/safeStorage'
+import { navBarHeight } from '@/utils/layout'
 
 interface BoardItem {
   id: number
@@ -312,8 +313,7 @@ const statusBarHeight = (() => {
   const info = uni.getWindowInfo()
   const statusBar = info.statusBarHeight ?? 0
   const menuBtn = uni.getMenuButtonBoundingClientRect()
-  const toolbarHeight = menuBtn.height + (menuBtn.top - statusBar) * 2
-  return statusBar + toolbarHeight
+  return navBarHeight(statusBar, menuBtn)
 })()
 
 function onBack() {
