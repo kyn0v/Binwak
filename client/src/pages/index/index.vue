@@ -9,7 +9,7 @@
       </view>
     </view>
 
-    <view class="grid-area" :style="{ paddingTop: gridAreaPaddingTop + 'px' }">
+    <view class="grid-area">
       <!-- Content area header: illustration-mode toggle right-aligned, in the same flow as the board -->
       <view class="grid-header" :style="gridHeaderStyle">
         <view class="grid-header-top">
@@ -344,7 +344,7 @@ import { onShow } from '@dcloudio/uni-app'
 import BingoCelebration from './BingoCelebration.vue'
 import MilestoneToast from './MilestoneToast.vue'
 
-const props = withDefaults(defineProps<{ statusBarHeight?: number; capsuleTop?: number; capsuleRightRpx?: number }>(), { statusBarHeight: 0, capsuleTop: 0, capsuleRightRpx: 24 })
+const props = withDefaults(defineProps<{ capsuleTop?: number; capsuleRightRpx?: number }>(), { capsuleTop: 0, capsuleRightRpx: 24 })
 import { useBingoBoard, GRID_SIZE_OPTIONS } from './useBingoBoard'
 import { useWordBank } from './useWordBank'
 import { useTheme, THEMES } from './useTheme'
@@ -375,11 +375,6 @@ const importCodeText = ref('')
 const isActionSheetOpen = ref(false)
 // Resolved presigned URLs keyed by cell position
 const cellResolvedUrls = ref<Record<number, string>>({})
-// Fixed header content height in px (title + board name row + card style picker)
-// Adjust this constant if the header layout changes significantly
-const HEADER_CONTENT_HEIGHT_PX = 40
-// Total offset for grid-area: status bar + fixed header content
-const gridAreaPaddingTop = computed(() => props.statusBarHeight + HEADER_CONTENT_HEIGHT_PX)
 const isPickingImage = ref(false)
 const cellPreviewIndex = ref(-1)
 
@@ -545,12 +540,11 @@ const pageStyle = computed(() => {
 })
 
 const headerStyle = computed(() => {
+  // Header lives in the normal flex flow (not fixed), so the grid-area below it
+  // is positioned by the layout engine — no manual offset constant needed. Only
+  // the top inset for the status bar + WeChat capsule must be reserved here,
+  // since that value isn't available to CSS.
   return {
-    position: 'fixed' as const,
-    top: '0',
-    left: '0',
-    right: '0',
-    zIndex: 100,
     paddingTop: `${props.capsuleTop}px`,
   }
 })
@@ -1543,14 +1537,13 @@ onMounted(async () => {
 .header {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 8rpx;
   padding: 0 32rpx 20rpx 32rpx;
-  margin: -20rpx 0 0;
   background: rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1rpx solid rgba(0, 0, 0, 0.06);
-  z-index: 100;
 }
 
 .header-top {
@@ -1752,7 +1745,7 @@ onMounted(async () => {
   flex-direction: column;
   align-items: flex-end;
   gap: 10rpx;
-  padding: 4rpx 0 calc(8rpx + 25px);
+  padding: 4rpx 0 58rpx;
 }
 
 .grid-header-top {
