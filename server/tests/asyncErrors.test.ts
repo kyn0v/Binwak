@@ -5,12 +5,13 @@ import { config } from '../src/config'
 import { resetTokenCache } from '../src/services/moderation'
 import { authHeader, createTestUser } from './helpers'
 
-// Regression test for async-error forwarding. Express 5 natively forwards a
-// rejected promise from an `async` route handler to the error middleware
-// (Express 4 needed the `express-async-errors` shim, since removed). An
-// unexpected rejection thrown inside an `async` handler (here, the outbound
-// GitHub `fetch` in POST /api/feedback) must reach the global errorHandler and
-// produce a structured 500 — instead of hanging the request.
+// Regression test for outbound-failure handling. The POST /api/feedback handler
+// performs an outbound GitHub `fetch` to create an issue. When that fetch
+// rejects (network down, DNS failure, timeout), the request must NOT hang and
+// must NOT leak a raw stack trace: the handler catches the rejection locally and
+// returns a structured 502 (bad upstream gateway). Express 5 would also forward
+// an uncaught async rejection to the global errorHandler as a 500, but the
+// local catch gives a more accurate status and message for an upstream failure.
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
@@ -42,11 +43,11 @@ describe('async error forwarding', () => {
     config.github.repo = originalGitHubRepo
   })
 
-  it('forwards an async handler rejection to the global error handler (500, not a hang)', async () => {
+  it('handles an outbound GitHub fetch rejection with a structured 502 (not a hang)', async () => {
     const { token } = createTestUser('async-err-openid')
     mockModerationPass()
-    // The GitHub issue-creation fetch rejects: the handler awaits it with no
-    // local try/catch, so the rejection must be caught by errorHandler.
+    // The GitHub issue-creation fetch rejects: the handler catches it locally
+    // and responds with a 502 instead of hanging or leaking a stack trace.
     fetchMock.mockRejectedValueOnce(new Error('network down'))
 
     const res = await request(app)
@@ -54,7 +55,7 @@ describe('async error forwarding', () => {
       .set('Authorization', authHeader(token))
       .send({ type: 'bug', title: '标题', content: '内容内容' })
 
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(502)
     expect(res.body.success).toBe(false)
   })
 })
