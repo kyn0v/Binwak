@@ -193,7 +193,7 @@ function handleLogout() {
     success: (res) => {
       if (res.confirm) {
         logout()
-        uni.reLaunch({ url: '/pages/main/main' })
+        uni.reLaunch({ url: '/pages/welcome/welcome' })
       }
     },
   })
