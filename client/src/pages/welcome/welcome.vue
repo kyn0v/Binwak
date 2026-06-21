@@ -69,9 +69,8 @@ const step = ref(0)
 const animating = ref(true)
 let touchStartX = 0
 
-onLoad(() => {
-  tryLogin()
-})
+// Welcome page is a passive entry point - no auto-login
+// Users must explicitly click "开始探索" to proceed
 
 async function tryLogin() {
   try {
@@ -106,9 +105,11 @@ function goTo(idx: number) {
   }, 20)
 }
 
-function onStart() {
+async function onStart() {
   safeSet(STORAGE_KEYS.ONBOARDED, 'true')
-  uni.reLaunch({ url: '/pages/main/main' })
+  await tryLogin()
+  // If tryLogin fails, user stays on welcome page
+  // If tryLogin succeeds and user is new, main page will handle onboarding
 }
 </script>
 
