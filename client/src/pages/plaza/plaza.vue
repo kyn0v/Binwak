@@ -628,7 +628,7 @@ onPullDownRefresh(async () => {
 }
 
 .plaza-header {
-  padding: 0 32rpx 16rpx;
+  padding: var(--header-top-gap, 20rpx) 32rpx 16rpx;
   background: transparent;
 }
 
