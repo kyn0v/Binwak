@@ -1,5 +1,5 @@
 <template>
-  <view class="profile-page" :style="{ paddingTop: props.statusBarHeight + 'px' }">
+  <view class="profile-page" :style="{ paddingTop: props.capsuleTop + 'px' }">
     <!-- Header -->
     <view class="profile-header">
       <view class="avatar">
@@ -102,7 +102,7 @@ import { useWordBank } from '../index/useWordBank'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet, safeSet } from '@/utils/safeStorage'
 
-const props = withDefaults(defineProps<{ statusBarHeight?: number }>(), { statusBarHeight: 0 })
+const props = withDefaults(defineProps<{ capsuleTop?: number }>(), { capsuleTop: 0 })
 
 const { wordBank, loadWordBank } = useWordBank()
 
@@ -256,7 +256,7 @@ onMounted(() => {
 .profile-header {
   display: flex;
   align-items: center;
-  padding: 48rpx 32rpx;
+  padding: var(--header-top-gap, 20rpx) 32rpx 48rpx;
   background: linear-gradient(160deg, #f5f5f5 0%, #fafafa 60%, #f0f0f0 100%);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;

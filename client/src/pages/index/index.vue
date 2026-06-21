@@ -1564,7 +1564,7 @@ onMounted(async () => {
   color: var(--text-color);
   letter-spacing: 3rpx;
   font-family: 'PingFang SC', 'SF Pro Display', 'Inter', 'Helvetica Neue', 'Marker Felt', sans-serif;
-  margin-top: 20rpx;
+  margin-top: var(--header-top-gap, 20rpx);
   padding-left: 8rpx;
   text-shadow:
     0 2rpx 6rpx rgba(0,0,0,0.10),

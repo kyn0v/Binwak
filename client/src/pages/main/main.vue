@@ -3,7 +3,7 @@
     <view v-if="pageReady" class="tab-content" :style="{ paddingBottom: tabbarHeight + 'px' }">
       <view v-show="currentTab === 'index'" class="tab-pane tab-pane-noscroll"><IndexTab ref="indexRef" :capsule-top="capsuleTop" :capsule-right-rpx="capsuleRightRpx" /></view>
       <view v-if="currentTab === 'plaza'" class="tab-pane"><PlazaTab ref="plazaRef" :status-bar-height="statusBarHeight" :capsule-top="capsuleTop" :tabbar-height="tabbarHeight" /></view>
-      <view v-if="profileMounted" v-show="currentTab === 'profile'" class="tab-pane"><ProfileTab ref="profileRef" :status-bar-height="statusBarHeight" /></view>
+      <view v-if="profileMounted" v-show="currentTab === 'profile'" class="tab-pane"><ProfileTab ref="profileRef" :capsule-top="capsuleTop" /></view>
     </view>
     <!-- Canvas elements at page level so createSelectorQuery can find them -->
     <canvas type="2d" id="bingoCanvas" class="offscreen-canvas"></canvas>
