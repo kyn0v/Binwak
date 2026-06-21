@@ -50,6 +50,9 @@ const profileMounted = ref(false)
 // a login + initial-sync cycle that gets torn down mid-flight, leaving
 // remoteBoardId unset (uploads silently no-op) and the homepage half-rendered.
 const pageReady = ref(false)
+// Tracks whether onboarding is confirmed. Set in onLoad (which fires before
+// onMounted) and read in onMounted to decide whether to reveal the tab content.
+const onboarded = ref(false)
 const safeAreaBottom = ref(0)
 const statusBarHeight = ref(0)
 const capsuleTop = ref(0)
@@ -99,7 +102,7 @@ onLoad(() => {
     uni.redirectTo({ url: '/pages/welcome/welcome' })
     return
   }
-  pageReady.value = true
+  onboarded.value = true
 })
 
 onMounted(() => {
@@ -123,6 +126,10 @@ onMounted(() => {
     normalWidth.value = 90
     activeWidth.value = 135
   }
+  // Reveal tab content only after layout values are measured, so the header
+  // offset and tabbar item widths are correct on the very first render. Guard on
+  // onboarding so a brand-new user redirecting to welcome never mounts IndexTab.
+  if (onboarded.value) pageReady.value = true
 })
 </script>
 
