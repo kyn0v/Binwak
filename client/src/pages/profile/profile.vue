@@ -63,6 +63,11 @@
           <text class="menu-label">关于</text>
           <text class="menu-arrow">›</text>
         </view>
+        <view class="menu-row logout-row" @tap="handleLogout">
+          <text class="menu-icon">🚪</text>
+          <text class="menu-label logout-label">退出登录</text>
+          <text class="menu-arrow">›</text>
+        </view>
       </view>
     </view>
 
@@ -98,6 +103,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getBoards, getMyTemplates, getProfile, updateNickname, updateImageStorage } from '../index/api'
+import { useAuth } from '../index/useAuth'
 import { useWordBank } from '../index/useWordBank'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet, safeSet } from '@/utils/safeStorage'
@@ -105,6 +111,7 @@ import { safeGet, safeSet } from '@/utils/safeStorage'
 const props = withDefaults(defineProps<{ statusBarHeight?: number }>(), { statusBarHeight: 0 })
 
 const { wordBank, loadWordBank } = useWordBank()
+const { logout } = useAuth()
 
 const nickname = ref('')
 const NICKNAME_KEY = STORAGE_KEYS.NICKNAME
@@ -173,6 +180,21 @@ function onCreditTap() {
     data: 'https://www.xiaoyuzhoufm.com/podcast/5e280faa418a84a0461f9e0a',
     success: () => {
       uni.showToast({ title: '播客链接已复制', icon: 'none' })
+    },
+  })
+}
+
+function handleLogout() {
+  uni.showModal({
+    title: '确认退出',
+    content: '退出后需要重新登录，在 DevTools 中可以选择其他测试账户。',
+    confirmText: '确认',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) {
+        logout()
+        uni.reLaunch({ url: '/pages/main/main' })
+      }
     },
   })
 }
@@ -360,6 +382,14 @@ onMounted(() => {
 .menu-arrow {
   font-size: 28rpx;
   color: #ccc;
+}
+
+.logout-row {
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.logout-label {
+  color: #e53935;
 }
 
 /* Footer */
