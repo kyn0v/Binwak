@@ -14,7 +14,6 @@ import type {
   UpdateBoardRequest,
   UpdateCellsRequest,
   ApiResponse,
-  DEFAULT_WORDS,
 } from '../../../shared/types'
 import { DEFAULT_WORDS } from '../../../shared/types'
 

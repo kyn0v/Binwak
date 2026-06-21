@@ -96,19 +96,27 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     return
   }
 
-  const ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      title: `${prefix} ${title.trim()}`,
-      body: body + `\n\n---\nSubmitted by: ${nickname}`,
-      labels: [type, `uid:${req.user!.userId}`],
-    }),
-  })
+  let ghRes: globalThis.Response
+  try {
+    ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: `${prefix} ${title.trim()}`,
+        body: body + `\n\n---\nSubmitted by: ${nickname}`,
+        labels: [type, `uid:${req.user!.userId}`],
+      }),
+      signal: AbortSignal.timeout(10000),
+    })
+  } catch (err) {
+    console.error('GitHub API request failed:', err)
+    res.status(502).json({ success: false, error: '创建 GitHub Issue 失败，请稍后重试' })
+    return
+  }
 
   if (!ghRes.ok) {
     const err = await ghRes.text()
@@ -135,12 +143,20 @@ router.get('/mine', authMiddleware, async (req: Request, res: Response) => {
   // Look up by immutable user id, not the mutable nickname: a reclaimed
   // nickname must never surface a previous owner's feedback issues.
   const q = `repo:${repo} label:"uid:${req.user!.userId}" is:issue`
-  const ghRes = await fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=created&order=desc&per_page=20`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/vnd.github+json',
-    },
-  })
+  let ghRes: globalThis.Response
+  try {
+    ghRes = await fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=created&order=desc&per_page=20`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+  } catch (err) {
+    console.error('GitHub API request failed:', err)
+    res.status(502).json({ success: false, error: '查询 GitHub Issues 失败' })
+    return
+  }
 
   if (!ghRes.ok) {
     res.status(502).json({ success: false, error: '查询 GitHub Issues 失败' })
