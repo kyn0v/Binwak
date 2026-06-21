@@ -47,6 +47,33 @@ npm --prefix server run test   # 后端测试
 npm --prefix client run test   # 前端测试
 ```
 
+### 真实端到端 + 看实际效果（可视化 QA）
+
+单元测试覆盖逻辑，但卡片导出、布局、样式等渲染效果需要在真实小程序里用眼睛验证。
+
+```bash
+cp .env.local.example .env.local   # 首次：填入 WX_APPID / WX_SECRET
+echo "VITE_API_BASE_URL=http://localhost:3000" > client/.env.development  # 首次：让客户端连本地后端
+npm run dev:local                  # 一条命令：起后端 + 客户端 watch 构建 + 打开微信开发者工具
+```
+
+`dev:local` 会启动后端（`http://localhost:3000`，真实 SQLite + 本地磁盘存储），构建客户端到 `dist/dev/mp-weixin`，并打开微信开发者工具。首次需在 **详情 → 本地设置 → 勾选「不校验合法域名」** 才能连本地后端。随后在模拟器/真机里登录、打卡、导出卡片，即可验证真实链路（含 `POST /api/upload` 图片上传，文件落到 `server/data/uploads/`）。`Ctrl-C` 退出。
+
+> ⚠️ `client/.env.development`（已 gitignore）会让 dev 构建覆盖 `client/.env` 里的生产域名、改为连本地。**不创建它，小程序会连到生产服务器**（写真实数据）。
+
+#### 重置到「全新第一次启动」
+
+本项目是本地优先架构，状态存在 **两处**：服务端数据库（`server/data/bingo.db`）和客户端缓存（微信小程序 Storage：打卡、token、词库）。两者会互相回灌——**只清一边，另一边下次启动会把数据推回去**。所以必须按顺序两边都清：
+
+```bash
+# ① 先清客户端缓存：微信开发者工具 → 工具 → 清除缓存 → 全部清除（先别重新编译）
+# ② 再重置服务端数据库：
+npm run reset:local
+# ③ 回开发者工具重新编译（Cmd/Ctrl + B）
+```
+
+清完后即为干净的初始状态（无打卡勾；词库里的 25 个默认词来自客户端内置 `DEFAULT_WORDS`，属正常）。日常调试无需重置——只有想看全新用户体验时才用。
+
 ### CI/CD
 
 | Workflow | 触发条件 | 动作 |
@@ -113,6 +140,33 @@ npm run dev
 npm --prefix server run test   # backend tests
 npm --prefix client run test   # frontend tests
 ```
+
+### End-to-End / Visual QA
+
+Unit tests cover logic, but rendering — card export, layout, styles — must be verified by eye in a real Mini Program.
+
+```bash
+cp .env.local.example .env.local   # first time: fill in WX_APPID / WX_SECRET
+echo "VITE_API_BASE_URL=http://localhost:3000" > client/.env.development  # first time: point the client at the local backend
+npm run dev:local                  # one command: backend + client watch build + opens WeChat DevTools
+```
+
+`dev:local` starts the backend (`http://localhost:3000`, real SQLite + local disk storage), builds the client to `dist/dev/mp-weixin`, and opens WeChat Developer Tools. On first run, enable **Details → Local settings → "Do not verify domains"** so it can reach the local backend. Then log in, check in, and export a card to exercise the real flow (including `POST /api/upload`, with files written to `server/data/uploads/`). Press `Ctrl-C` to stop.
+
+> ⚠️ `client/.env.development` (gitignored) makes the dev build override the production domain in `client/.env` and target localhost. **Without it, the Mini Program talks to the production server** (writing real data).
+
+#### Reset to a clean "first launch"
+
+This app is local-first, so state lives in **two** places: the server database (`server/data/bingo.db`) and the client cache (WeChat Mini Program Storage: ticks, token, word bank). They re-seed each other — **clearing only one lets the other push its data back** on next launch. So clear both, in order:
+
+```bash
+# ① Clear the client cache first: WeChat DevTools → Tools → Clear cache → Clear all (don't recompile yet)
+# ② Then reset the server database:
+npm run reset:local
+# ③ Recompile in DevTools (Cmd/Ctrl + B)
+```
+
+You'll then see the clean initial state (no ticks; the 25 default words come from the client's built-in `DEFAULT_WORDS` — that's expected). Day-to-day debugging needs no reset — use it only when you want a fresh-user experience.
 
 ### CI/CD
 
