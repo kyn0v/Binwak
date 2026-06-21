@@ -14,7 +14,9 @@ import type {
   UpdateBoardRequest,
   UpdateCellsRequest,
   ApiResponse,
+  DEFAULT_WORDS,
 } from '../../../shared/types'
+import { DEFAULT_WORDS } from '../../../shared/types'
 
 const router = Router()
 
@@ -232,7 +234,7 @@ router.post('/', (req: Request, res: Response): void => {
 
   // Wrap deactivate + create board + create cells in a single transaction
   const insertCell = db.prepare(
-    'INSERT INTO cells (board_id, position) VALUES (?, ?)'
+    'INSERT INTO cells (board_id, position, title) VALUES (?, ?, ?)'
   )
   const totalCells = gridSize * gridSize
 
@@ -247,9 +249,10 @@ router.post('/', (req: Request, res: Response): void => {
 
     const boardId = result.lastInsertRowid as number
 
-    // Create empty cells
+    // Create cells pre-filled with default words
     for (let i = 0; i < totalCells; i++) {
-      insertCell.run(boardId, i)
+      const cellTitle = DEFAULT_WORDS[i] ?? ''
+      insertCell.run(boardId, i, cellTitle)
     }
 
     return boardId
