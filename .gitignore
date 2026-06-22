@@ -49,3 +49,6 @@ shared/*.d.ts.map
 
 # TypeScript build cache
 *.tsbuildinfo
+
+# Visual regression diff output (kept local; baselines ARE committed)
+client/tests/e2e/**/__diff_output__/
