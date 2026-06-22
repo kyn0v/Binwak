@@ -23,7 +23,7 @@
           <text class="menu-label">我的Bingo卡</text>
           <text class="menu-arrow">›</text>
         </view>
-        <view class="menu-row" @tap="goToMyTemplates">
+        <view v-if="ENABLE_TEMPLATE_PUBLISHING" class="menu-row" @tap="goToMyTemplates">
           <text class="menu-icon">📦</text>
           <text class="menu-label">我发布的模板</text>
           <text class="menu-value">{{ myTemplateCount }}</text>
@@ -100,6 +100,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { getBoards, getMyTemplates, getProfile, updateNickname, updateImageStorage } from '../index/api'
 import { useWordBank } from '../index/useWordBank'
 import { STORAGE_KEYS } from '@/config/storageKeys'
+import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
 import { safeGet, safeSet } from '@/utils/safeStorage'
 
 const props = withDefaults(defineProps<{ capsuleTop?: number }>(), { capsuleTop: 0 })

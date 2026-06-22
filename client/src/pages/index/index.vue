@@ -83,7 +83,7 @@
             <!-- Share / export -->
             <view class="menu-group">
               <view class="menu-item" @tap="onOpenSharePanel">分享/应用Bingo码</view>
-              <view class="menu-item" :class="{ 'menu-item-disabled': !!currentPublishedTemplateId }" @tap="onOpenPublishPanel">{{ currentPublishedTemplateId ? '已发布 📤' : '发布到广场' }}</view>
+              <view v-if="ENABLE_TEMPLATE_PUBLISHING" class="menu-item" :class="{ 'menu-item-disabled': !!currentPublishedTemplateId }" @tap="onOpenPublishPanel">{{ currentPublishedTemplateId ? '已发布 📤' : '发布到广场' }}</view>
             </view>
             <view class="menu-divider"></view>
             <!-- Manage -->
@@ -358,6 +358,7 @@ import { deleteBoard, resolveApiUrl, matchIllustrations, getProfile } from './ap
 import { usePrivateImage } from './usePrivateImage'
 import { getBoardState as boardStateOf, defaultIllustModeOn } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
+import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
 import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
 
 // ── state ──

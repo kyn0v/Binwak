@@ -17,7 +17,7 @@
         </button>
         <view class="bingo-btn-row">
           <button class="bingo-btn secondary" @tap="$emit('preview')">预览卡片</button>
-          <button v-if="isAllDone && !currentPublishedTemplateId" class="bingo-btn secondary" @tap="$emit('publish')">发布广场</button>
+          <button v-if="ENABLE_TEMPLATE_PUBLISHING && isAllDone && !currentPublishedTemplateId" class="bingo-btn secondary" @tap="$emit('publish')">发布广场</button>
           <button v-else class="bingo-btn secondary" @tap="$emit('share')">分享</button>
         </view>
       </view>
@@ -27,6 +27,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
 
 const props = defineProps<{
   show: boolean
