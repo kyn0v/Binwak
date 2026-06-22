@@ -1532,7 +1532,8 @@ onMounted(async () => {
 }
 
 .page.page-edit-mode {
-  padding-bottom: 280rpx; /* extra space for edit bar + TabBar */
+  /* Clear the fixed edit bar plus the TabBar (≈ 172rpx edit bar + tabbar). */
+  padding-bottom: calc(172rpx + var(--tabbar-content-height));
 }
 
 .header {
@@ -2309,7 +2310,7 @@ onMounted(async () => {
   background: var(--panel-gradient, var(--cell-bg));
   border-radius: 24rpx 24rpx 0 0;
   padding: 24rpx;
-  padding-bottom: calc(24rpx + 120rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(24rpx + var(--tabbar-content-height) + env(safe-area-inset-bottom));
   max-height: 70vh;
   display: flex;
   flex-direction: column;
@@ -2869,7 +2870,7 @@ onMounted(async () => {
   display: flex;
   gap: 20rpx;
   padding: 20rpx 32rpx;
-  padding-bottom: calc(20rpx + 120rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(20rpx + var(--tabbar-content-height) + env(safe-area-inset-bottom));
   background: var(--panel-gradient, var(--cell-bg));
   border-top: 2rpx solid var(--border-color);
   border-radius: 24rpx 24rpx 0 0;

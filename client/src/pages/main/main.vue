@@ -120,6 +120,11 @@ onMounted(() => {
     normalWidth.value = widths.normalWidth
     activeWidth.value = widths.activeWidth
   } catch {
+    // Fallback when window/menu-button measurement throws (e.g. unsupported
+    // platform). Conservative defaults sized for a ~375pt iPhone: tabbarHeight
+    // ≈ 108rpx content + safe area, capsule right inset ≈ 24rpx, and tab widths
+    // for a 3-tab bar. The UI stays usable; exact values self-correct on a
+    // later successful measurement if one occurs.
     safeAreaBottom.value = 0
     tabbarHeight.value = 120
     capsuleRightRpx.value = 24
