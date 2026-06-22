@@ -10,6 +10,8 @@ declare const program: any
 // `wx` is available inside program.evaluate() (runs in the mp runtime).
 declare const wx: any
 
+import type { TemplateListItem } from '../../../shared/types'
+
 const ONBOARDED_KEY = 'binwak-onboarded'
 
 /**
@@ -133,7 +135,7 @@ export async function restoreActionSheet(): Promise<void> {
  * Deterministic plaza template list. Shape matches `TemplateListItem` so the
  * cards render exactly as they would from the live `/api/templates` response.
  */
-export const PLAZA_TEMPLATES_FIXTURE = [
+export const PLAZA_TEMPLATES_FIXTURE: TemplateListItem[] = [
   {
     id: 101, title: 'Citywalk 经典挑战', description: '随手记录城市角落',
     gridSize: 5, category: 'nicetry', isPinned: false, favoriteCount: 1, isFavorite: false,

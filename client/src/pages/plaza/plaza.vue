@@ -566,9 +566,13 @@ watch([currentCategory, currentSort], () => {
  * Measure the fixed-layer geometry from the real rendered DOM.
  *
  * Each fixed layer's position derives from the measured bottom of the layer
- * above it — no hard-coded layer heights. Runs in two passes: pass 1 measures
- * the sticky header + viewport (enough to reveal the gated layers), pass 2
- * measures the now-rendered category/sort/tabbar to lock in exact positions.
+ * above it — no hard-coded layer heights. Runs in three dependency-ordered
+ * passes, each after the previous layer's reactive position has repainted:
+ * pass 1 measures the sticky header + viewport (enough to reveal the gated
+ * layers), pass 2 measures the category row + tabbar, and pass 3 measures the
+ * sort bar (which only sits at its final position once the category row's
+ * bottom is locked in). See the inline note below and PR #64 for why the sort
+ * bar must be measured separately rather than alongside the category row.
  */
 function measureLayout() {
   const q1 = uni.createSelectorQuery()
