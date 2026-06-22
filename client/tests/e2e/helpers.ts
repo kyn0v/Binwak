@@ -80,6 +80,56 @@ export async function switchTab(page: any, idx: number): Promise<void> {
 }
 
 /**
+ * Seed a board that is one cell short of a Bingo line, so completing the last
+ * cell of the first row triggers the celebration.
+ *
+ * Row 0 has cells 0,1,2 completed and cell 3 NOT completed. loadState() records
+ * the current (zero) line count as "already seen", so newly completing cell 3
+ * forms a fresh line and fires showBingo. Tapping is driven through a mocked
+ * showActionSheet (see mockActionSheet) since real completion goes via a native
+ * ActionSheet.
+ */
+export async function seedBingoReadyBoard(): Promise<void> {
+  await program.evaluate(() => {
+    try {
+      const GRID = 4
+      const titles = [
+        '瀑布', '搭档', '作画', '口罩',
+        '古代人', '谐音梗', '厉害折扣', '花束',
+        '跑者', '落单耳机', '摆拍', '野猫对视',
+        'Nice Try', '球体', '一饮而尽', '好快的车',
+      ]
+      const cells = titles.map((title, i) => ({
+        id: i,
+        title,
+        // First row all but the last cell completed → one tap away from a line.
+        completed: i === 0 || i === 1 || i === 2,
+      }))
+      wx.setStorageSync('binwak-onboarded', 'true')
+      wx.setStorageSync('binwak-bingo-grid-size', GRID)
+      wx.setStorageSync('binwak-bingo-state', { cells, hasBingo: false, gridSize: GRID })
+      wx.setStorageSync('binwak-board-title', '测试卡片')
+      wx.setStorageSync('binwak-nickname', '测试用户')
+      wx.setStorageSync('binwak-bingo-theme', 'default')
+    } catch (e) {}
+  })
+}
+
+/**
+ * Force uni.showActionSheet to resolve with a fixed tapIndex, so tests can drive
+ * the cell-completion flow without interacting with the native ActionSheet.
+ * tapIndex 1 on an incomplete cell = "✅ 仅标记完成". Call restoreActionSheet()
+ * after.
+ */
+export async function mockActionSheet(tapIndex = 1): Promise<void> {
+  await program.mockUniMethod('showActionSheet', { tapIndex })
+}
+
+export async function restoreActionSheet(): Promise<void> {
+  await program.restoreUniMethod('showActionSheet')
+}
+
+/**
  * Capture a full-screen screenshot as a Buffer for visual-regression matching.
  *
  * uni-automator's `program.screenshot()` returns a base64 PNG when no `path` is
