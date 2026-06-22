@@ -10,6 +10,8 @@ declare const program: any
 // `wx` is available inside program.evaluate() (runs in the mp runtime).
 declare const wx: any
 
+import type { TemplateListItem } from '../../../shared/types'
+
 const ONBOARDED_KEY = 'binwak-onboarded'
 
 /**
@@ -127,6 +129,62 @@ export async function mockActionSheet(tapIndex = 1): Promise<void> {
 
 export async function restoreActionSheet(): Promise<void> {
   await program.restoreUniMethod('showActionSheet')
+}
+
+/**
+ * Deterministic plaza template list. Shape matches `TemplateListItem` so the
+ * cards render exactly as they would from the live `/api/templates` response.
+ */
+export const PLAZA_TEMPLATES_FIXTURE: TemplateListItem[] = [
+  {
+    id: 101, title: 'Citywalk 经典挑战', description: '随手记录城市角落',
+    gridSize: 5, category: 'nicetry', isPinned: false, favoriteCount: 1, isFavorite: false,
+    authorName: 'Binwak', useCount: 2,
+    previewCells: ['瀑布', '搭档', '作画', '口罩+帽子+眼镜', '古代人', '谐音梗', '厉害折扣', '花束', '彩蛋'],
+    createdAt: '2026-06-01T00:00:00.000Z',
+  },
+  {
+    id: 102, title: '脑洞大开 Bingo Vol.3', description: 'Binwak 初始挑战',
+    gridSize: 5, category: 'creative', isPinned: true, favoriteCount: 1, isFavorite: false,
+    authorName: 'Binwak', useCount: 0,
+    previewCells: ['不可撤销', '维修中', '摇子', '冰可乐', '票', '洗脑循环', '无酒精', '香の物', '加更'],
+    createdAt: '2026-05-20T00:00:00.000Z',
+  },
+  {
+    id: 103, title: 'Nice Try Bingo II', description: 'Citywalk 经典挑战',
+    gridSize: 5, category: 'nicetry', isPinned: false, favoriteCount: 0, isFavorite: false,
+    authorName: 'Binwak', useCount: 2,
+    previewCells: ['不可以', 'PIZZA', '穿衣服的狗', '抄近路', '可爱情侣', '红白黑组合', '二刀流', '招财猫', '惊喜'],
+    createdAt: '2026-05-10T00:00:00.000Z',
+  },
+]
+
+/**
+ * Mock `/api/templates` so the plaza renders real cards instead of an empty
+ * list in the offline test runtime. The plaza only issues `getTemplates`
+ * requests while it is the active tab, so a static success result is safe here.
+ * Mock AFTER landing on main (so app-start login behaves normally) and BEFORE
+ * switching to the plaza tab (so its onMounted fetch hits the mock). Pair with
+ * restorePlazaTemplates() in afterAll.
+ */
+export async function mockPlazaTemplates(): Promise<void> {
+  await program.mockUniMethod('request', {
+    statusCode: 200,
+    header: {},
+    data: {
+      success: true,
+      data: {
+        templates: PLAZA_TEMPLATES_FIXTURE,
+        total: PLAZA_TEMPLATES_FIXTURE.length,
+        page: 1,
+        limit: 10,
+      },
+    },
+  })
+}
+
+export async function restorePlazaTemplates(): Promise<void> {
+  await program.restoreUniMethod('request')
 }
 
 /**

@@ -12,7 +12,7 @@
  * diffs. The failureThreshold in imageSnapshotOptions absorbs antialiasing, but
  * large dynamic regions should be stabilized or excluded as the suite grows.
  */
-import { gotoMain, switchTab, screenshotBuffer, imageSnapshotOptions, seedFixtures } from './helpers'
+import { gotoMain, switchTab, screenshotBuffer, imageSnapshotOptions, seedFixtures, mockPlazaTemplates, restorePlazaTemplates } from './helpers'
 
 // jest-image-snapshot augments expect() at runtime via setup.image.js.
 declare global {
@@ -43,12 +43,26 @@ describe('main tabs (visual regression)', () => {
   })
 
   it('plaza tab matches baseline', async () => {
+    // The plaza list comes from /api/templates, which is offline in the test
+    // runtime. Mock it before the tab mounts so the baseline captures real
+    // cards (not an empty list). Restore is done in afterEach so it runs even
+    // when the snapshot assertion throws — otherwise the request mock would
+    // leak into the profile tab test and corrupt its screenshot.
+    await mockPlazaTemplates()
     await switchTab(page, 1)
+    // Let the list render and the 3-pass fixed-layout measurement settle.
+    await page.waitFor(1500)
     const img = await screenshotBuffer()
     expect(img).toMatchImageSnapshot({
       ...imageSnapshotOptions,
       customSnapshotIdentifier: 'tab-plaza',
     })
+  })
+
+  // Always tear the request mock down, regardless of assertion outcome, so a
+  // plaza snapshot failure never leaks the stub into the following tests.
+  afterEach(async () => {
+    await restorePlazaTemplates()
   })
 
   it('profile tab matches baseline', async () => {
