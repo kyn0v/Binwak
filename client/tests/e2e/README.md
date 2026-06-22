@@ -88,3 +88,9 @@ npm run test:e2e:mp -- visual.e2e
 **完全自包含、可复现**，不依赖后端数据或当前日期。这是纯测试侧 fixture，不改动任何
 生产代码（注意：`safeStorage` 不做 JSON 序列化，对象/数字要直接写入，不能 stringify）。
 
+广场（plaza）的列表来自 `/api/templates`，在离线测试运行时取不到数据，故视觉用例在切到
+广场前调用 `mockPlazaTemplates()`（用 `mockUniMethod('request', …)` 返回固定的
+`PLAZA_TEMPLATES_FIXTURE`），让基准图包含真实卡片而非空列表，截图后 `restorePlazaTemplates()`
+还原以免影响「我的」tab 的请求。改动 mock 数据或广场布局后，需用 `-u` 重新生成
+`tab-plaza.png` 基准图。
+

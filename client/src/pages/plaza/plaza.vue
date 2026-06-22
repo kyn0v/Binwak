@@ -589,20 +589,35 @@ function measureLayout() {
       windowHeight.value = viewport.height
       tabbarTop.value = viewport.height - props.tabbarHeight
     }
-    // Reveal the gated layers, then measure them on the next frame.
+    // Reveal the gated layers, then measure them in dependency order. Each
+    // layer's `top` derives from the measured bottom of the layer above it, so
+    // we must measure sequentially: the category row only sits at its final
+    // position once `headerBottom` is set, and the sort bar only sits at its
+    // final position once `categoryBottom` is corrected. Measuring the sort bar
+    // in the same frame as the category row would read it at its stale,
+    // seed-based position and leave `contentTop` (and thus the list) shifted up
+    // under the fixed header. See PR #64 regression.
     layoutReady.value = true
     nextTick(() => {
+      // Pass 2: category row (now positioned below the measured header) + tabbar.
       const q2 = uni.createSelectorQuery()
-      q2.select('.sort-bar-fixed').boundingClientRect()
-      q2.select('.custom-tabbar').boundingClientRect()
       q2.select('.category-tabs-fixed').boundingClientRect()
+      q2.select('.custom-tabbar').boundingClientRect()
       q2.exec((res2) => {
-        const cat = res2?.[2] as { bottom?: number } | undefined
-        const sort = res2?.[0] as { bottom?: number } | undefined
+        const cat = res2?.[0] as { bottom?: number } | undefined
         const tabbar = res2?.[1] as { top?: number } | undefined
         if (cat?.bottom && cat.bottom > 0) categoryBottom.value = cat.bottom
-        if (sort?.bottom && sort.bottom > 0) sortBarBottom_.value = sort.bottom
         if (tabbar?.top && tabbar.top > 0) tabbarTop.value = tabbar.top
+        // Pass 3: sort bar — only now does it sit below the corrected category
+        // row, so its measured bottom (and therefore `contentTop`) is accurate.
+        nextTick(() => {
+          const q3 = uni.createSelectorQuery()
+          q3.select('.sort-bar-fixed').boundingClientRect()
+          q3.exec((res3) => {
+            const sort = res3?.[0] as { bottom?: number } | undefined
+            if (sort?.bottom && sort.bottom > 0) sortBarBottom_.value = sort.bottom
+          })
+        })
       })
     })
   })
