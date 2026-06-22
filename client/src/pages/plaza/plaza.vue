@@ -35,6 +35,7 @@
 
     <!-- Category tags: separate fixed element (scroll-view can't be inside fixed container) -->
     <scroll-view
+      v-if="layoutReady"
       class="category-tabs category-tabs-fixed"
       scroll-x
       enable-flex
@@ -319,16 +320,18 @@ const showBackToTop = ref(false)
 const scrollTopVal = ref(0)
 let lastScrollTop = 0
 
-// Dynamic layout: constants below are initial estimates only; the real
-// positions are measured at runtime via boundingClientRect() in onMounted.
-const CATEGORY_BAR_PX = 40
-const SORT_BAR_PX = 44
-const headerBottom = ref(props.capsuleTop + 185)
-// Initial estimate; corrected by measuring .category-tabs-fixed after mount.
-const categoryBottom = ref((props.capsuleTop + 185 - 12) + CATEGORY_BAR_PX)
-const sortBarBottom_ = ref(categoryBottom.value + SORT_BAR_PX)
-const windowHeight = ref(750)
-const tabbarTop = ref(windowHeight.value - props.tabbarHeight)
+// Fixed-overlay layout geometry (px). The plaza stacks several fixed layers
+// (sticky header → category tabs → sort bar → scrollable list). Their positions
+// are *measured* at runtime via boundingClientRect() in onMounted; we don't hard
+// code layer heights. Content that depends on measured values is gated behind
+// `layoutReady`, so these initial values are placeholders that are never used to
+// render the final layout — they only seed the refs before the first measure.
+const headerBottom = ref(props.capsuleTop)
+const categoryBottom = ref(props.capsuleTop)
+const sortBarBottom_ = ref(props.capsuleTop)
+// Viewport height (px); seeded from window info, then confirmed by measurement.
+const windowHeight = ref(uni.getWindowInfo().windowHeight || 0)
+const tabbarTop = ref(0)
 const layoutReady = ref(false)
 const contentTop = computed(() => sortBarBottom_.value - 12)
 const contentHeight = computed(() => tabbarTop.value - contentTop.value)
@@ -559,46 +562,56 @@ watch([currentCategory, currentSort], () => {
   fetchTemplates(true)
 })
 
+/**
+ * Measure the fixed-layer geometry from the real rendered DOM.
+ *
+ * Each fixed layer's position derives from the measured bottom of the layer
+ * above it — no hard-coded layer heights. Runs in two passes: pass 1 measures
+ * the sticky header + viewport (enough to reveal the gated layers), pass 2
+ * measures the now-rendered category/sort/tabbar to lock in exact positions.
+ */
+function measureLayout() {
+  const q1 = uni.createSelectorQuery()
+  q1.select('.plaza-sticky-header').boundingClientRect()
+  q1.selectViewport().fields({ size: true }, () => {})
+  q1.exec((res) => {
+    const header = res?.[0] as { bottom?: number } | undefined
+    const viewport = res?.[1] as { height?: number } | undefined
+    if (header?.bottom && header.bottom > 0) {
+      headerBottom.value = header.bottom
+      // Category tabs sit right below the header; sort bar below the category
+      // row. Seed both from the header so the gated layers render in roughly the
+      // right place, then pass 2 corrects them from their own measured bottoms.
+      categoryBottom.value = header.bottom
+      sortBarBottom_.value = header.bottom
+    }
+    if (viewport?.height && viewport.height > 0) {
+      windowHeight.value = viewport.height
+      tabbarTop.value = viewport.height - props.tabbarHeight
+    }
+    // Reveal the gated layers, then measure them on the next frame.
+    layoutReady.value = true
+    nextTick(() => {
+      const q2 = uni.createSelectorQuery()
+      q2.select('.sort-bar-fixed').boundingClientRect()
+      q2.select('.custom-tabbar').boundingClientRect()
+      q2.select('.category-tabs-fixed').boundingClientRect()
+      q2.exec((res2) => {
+        const cat = res2?.[2] as { bottom?: number } | undefined
+        const sort = res2?.[0] as { bottom?: number } | undefined
+        const tabbar = res2?.[1] as { top?: number } | undefined
+        if (cat?.bottom && cat.bottom > 0) categoryBottom.value = cat.bottom
+        if (sort?.bottom && sort.bottom > 0) sortBarBottom_.value = sort.bottom
+        if (tabbar?.top && tabbar.top > 0) tabbarTop.value = tabbar.top
+      })
+    })
+  })
+}
+
 onMounted(() => {
   fetchTemplates(true)
-  // Step 1: measure sticky header bottom
-  setTimeout(() => {
-    const query = uni.createSelectorQuery()
-    query.select('.plaza-sticky-header').boundingClientRect()
-    query.selectViewport().fields({ size: true }, () => {})
-    query.exec((res) => {
-      if (res && res[0] && res[1]) {
-        const measuredHeaderBottom = res[0].bottom as number
-        if (measuredHeaderBottom > 0) {
-          headerBottom.value = measuredHeaderBottom
-          categoryBottom.value = (headerBottom.value - 12) + CATEGORY_BAR_PX
-        }
-        windowHeight.value = res[1].height || 750
-        tabbarTop.value = windowHeight.value - props.tabbarHeight
-      }
-      // sortBarBottom_ initial estimate from categoryBottom
-      sortBarBottom_.value = categoryBottom.value + SORT_BAR_PX
-      layoutReady.value = true
-      // Step 2: after all fixed layers render, measure sort-bar and tabbar
-      setTimeout(() => {
-        const q2 = uni.createSelectorQuery()
-        q2.select('.sort-bar-fixed').boundingClientRect()
-        q2.select('.custom-tabbar').boundingClientRect()
-        q2.select('.category-tabs-fixed').boundingClientRect()
-        q2.exec((res2) => {
-          if (res2?.[2]?.bottom > 0) {
-            categoryBottom.value = res2[2].bottom as number
-          }
-          if (res2?.[0]?.bottom > 0) {
-            sortBarBottom_.value = res2[0].bottom as number
-          }
-          if (res2?.[1]?.top > 0) {
-            tabbarTop.value = res2[1].top as number
-          }
-        })
-      }, 100)
-    })
-  }, 300)
+  // Measure after the first render so the sticky header has real dimensions.
+  nextTick(measureLayout)
 })
 
 onPullDownRefresh(async () => {
