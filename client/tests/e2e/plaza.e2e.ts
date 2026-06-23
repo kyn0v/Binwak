@@ -1,9 +1,10 @@
 /**
  * Plaza tab layout E2E.
  *
- * Guards the fixed-overlay layout after the magic-number refactor: the sticky
- * header, category tabs, sort bar, and content list must all render once
- * layout measurement completes, and the discover/favorites switch must work.
+ * Guards the flow-based flex layout: the header stack, category tabs, sort bar,
+ * and content list must all render, and the discover/favorites switch must work.
+ * The content list is a flex-1 scroll-view that fills the space below the header
+ * stack, so the first card must never be occluded by the header.
  *
  * The plaza pulls its list from `/api/templates`, which is unreachable in the
  * offline test runtime, so we mock it (see mockPlazaTemplates) to render real
@@ -34,16 +35,15 @@ describe('plaza layout', () => {
     await restorePlazaTemplates()
   })
 
-  it('renders the sticky header (title + tabs + search)', async () => {
-    expect(await page.$('.plaza-sticky-header')).toBeTruthy()
+  it('renders the header stack (title + tabs + search)', async () => {
+    expect(await page.$('.plaza-header-stack')).toBeTruthy()
     expect(await page.$('.plaza-title')).toBeTruthy()
     expect(await page.$('.search-bar')).toBeTruthy()
   })
 
-  it('renders the gated fixed layers after measurement', async () => {
-    // category tabs + sort bar are gated behind layoutReady; they must appear.
-    expect(await page.$('.category-tabs-fixed')).toBeTruthy()
-    expect(await page.$('.sort-bar-fixed')).toBeTruthy()
+  it('renders the category tabs and sort bar', async () => {
+    expect(await page.$('.category-tabs')).toBeTruthy()
+    expect(await page.$('.sort-bar')).toBeTruthy()
   })
 
   it('renders template cards from the mocked list', async () => {
@@ -51,12 +51,11 @@ describe('plaza layout', () => {
     expect(cards.length).toBeGreaterThan(0)
   })
 
-  it('does not let the fixed header/sort bar occlude the first card', async () => {
-    // Regression for the layout-measurement race (PR #64): the content
-    // scroll-view must start below the sort bar, so the first card's top edge
-    // sits at or below the sort bar's bottom (allowing the small intentional
-    // overlap nudges in the layout: -12px content + -8px sort).
-    const sort = await page.$('.sort-bar-fixed')
+  it('does not let the header/sort bar occlude the first card', async () => {
+    // In the flow layout the content scroll-view fills the space below the sort
+    // bar, so the first card's top edge must sit at or below the sort bar's
+    // bottom — never tucked behind the header stack.
+    const sort = await page.$('.sort-bar')
     const sortOffset = await sort.offset()
     const sortSize = await sort.size()
     const sortBottom = sortOffset.top + sortSize.height
@@ -65,7 +64,7 @@ describe('plaza layout', () => {
     expect(firstCard).toBeTruthy()
     const cardOffset = await firstCard.offset()
 
-    // Tolerance covers the combined -20px overlap nudges plus sub-pixel rounding.
+    // Tolerance covers list padding plus sub-pixel rounding.
     expect(cardOffset.top).toBeGreaterThanOrEqual(sortBottom - 24)
   })
 
@@ -75,9 +74,9 @@ describe('plaza layout', () => {
     await tabs[1].tap() // 我的收藏
     await page.waitFor(1000)
     // sort bar is discover-only; gone on favorites
-    expect(await page.$('.sort-bar-fixed')).toBeFalsy()
+    expect(await page.$('.sort-bar')).toBeFalsy()
     await tabs[0].tap() // back to 发现
     await page.waitFor(1000)
-    expect(await page.$('.sort-bar-fixed')).toBeTruthy()
+    expect(await page.$('.sort-bar')).toBeTruthy()
   })
 })

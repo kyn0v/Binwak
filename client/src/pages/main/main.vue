@@ -2,7 +2,7 @@
   <view class="main-container">
     <view v-if="pageReady" class="tab-content" :style="{ paddingBottom: tabbarHeight + 'px' }">
       <view v-show="currentTab === 'index'" class="tab-pane tab-pane-noscroll"><IndexTab ref="indexRef" :capsule-top="capsuleTop" :capsule-right-rpx="capsuleRightRpx" /></view>
-      <view v-if="currentTab === 'plaza'" class="tab-pane"><PlazaTab ref="plazaRef" :status-bar-height="statusBarHeight" :capsule-top="capsuleTop" :tabbar-height="tabbarHeight" /></view>
+      <view v-if="currentTab === 'plaza'" class="tab-pane"><PlazaTab ref="plazaRef" :capsule-top="capsuleTop" /></view>
       <view v-if="profileMounted" v-show="currentTab === 'profile'" class="tab-pane"><ProfileTab ref="profileRef" :capsule-top="capsuleTop" /></view>
     </view>
     <!-- Canvas elements at page level so createSelectorQuery can find them -->
@@ -37,7 +37,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet } from '@/utils/safeStorage'
-import { navBarHeight, capsuleRightRpx as calcCapsuleRightRpx, tabbarHeight as calcTabbarHeight, tabWidths } from '@/utils/layout'
+import { capsuleRightRpx as calcCapsuleRightRpx, tabbarHeight as calcTabbarHeight, tabWidths } from '@/utils/layout'
+
 import IndexTab from '../index/index.vue'
 import PlazaTab from '../plaza/plaza.vue'
 import ProfileTab from '../profile/profile.vue'
@@ -54,7 +55,6 @@ const pageReady = ref(false)
 // onMounted) and read in onMounted to decide whether to reveal the tab content.
 const onboarded = ref(false)
 const safeAreaBottom = ref(0)
-const statusBarHeight = ref(0)
 const capsuleTop = ref(0)
 const capsuleRightRpx = ref(24)
 const tabbarHeight = ref(120) // fallback px, updated after mount
@@ -108,9 +108,7 @@ onLoad(() => {
 onMounted(() => {
   try {
     const windowInfo = uni.getWindowInfo()
-    const { statusBarHeight: statusBar = 0 } = windowInfo as any
     const menuBtn = uni.getMenuButtonBoundingClientRect()
-    statusBarHeight.value = navBarHeight(statusBar, menuBtn)
     capsuleTop.value = menuBtn.top
     capsuleRightRpx.value = calcCapsuleRightRpx(windowInfo.windowWidth, menuBtn)
     safeAreaBottom.value = windowInfo.safeAreaInsets?.bottom || 0
@@ -177,9 +175,7 @@ onMounted(() => {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #ffffff;
   border-top: 1rpx solid #f0ede8;
   z-index: 999;
 }

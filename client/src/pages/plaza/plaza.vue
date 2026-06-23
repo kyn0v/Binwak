@@ -1,9 +1,9 @@
 <template>
   <view class="plaza-page">
-    <!-- Sticky header: title + tab + search + category tags -->
+    <!-- Header: title + tab + search (normal flex flow, pinned by layout order) -->
     <view
-      class="plaza-sticky-header"
-      :style="{ position: 'fixed', top: '0', left: '0', right: '0', zIndex: 100, paddingTop: props.capsuleTop + 'px' }"
+      class="plaza-header-stack"
+      :style="{ paddingTop: props.capsuleTop + 'px' }"
     >
       <view class="plaza-header">
         <text class="plaza-title">模板广场</text>
@@ -33,13 +33,11 @@
       </view>
     </view>
 
-    <!-- Category tags: separate fixed element (scroll-view can't be inside fixed container) -->
+    <!-- Category tags: normal flow, horizontally scrollable -->
     <scroll-view
-      v-if="layoutReady"
-      class="category-tabs category-tabs-fixed"
+      class="category-tabs"
       scroll-x
       enable-flex
-      :style="{ top: (headerBottom - 12) + 'px' }"
     >
       <view
         v-for="cat in categories"
@@ -52,22 +50,21 @@
       </view>
     </scroll-view>
 
-    <!-- Sort bar: fixed below category tabs, discover tab only -->
+    <!-- Sort bar: normal flow, discover tab only -->
     <view
-      v-if="topTab === 'discover' && layoutReady"
-      class="sort-bar sort-bar-fixed"
+      v-if="topTab === 'discover'"
+      class="sort-bar"
       id="sort-bar"
-      :style="{ top: (categoryBottom - 8) + 'px' }"    >
+    >
       <view class="sort-option" :class="{ 'sort-active': currentSort === 'recommend' }" @tap="currentSort = 'recommend'">综合</view>
       <view class="sort-option" :class="{ 'sort-active': currentSort === 'newest' }" @tap="currentSort = 'newest'">最新</view>
     </view>
 
-    <!-- Content area: fixed scroll-view with precise height -->
+    <!-- Content area: fills remaining space, scrolls internally -->
     <scroll-view
-      v-if="topTab === 'discover' && layoutReady"
-      class="template-list template-list-fixed"
+      v-if="topTab === 'discover'"
+      class="template-list"
       scroll-y
-      :style="{ top: contentTop + 'px', height: contentHeight + 'px' }"
       :scroll-top="scrollTopVal"
       @scrolltolower="loadMore"
       @scroll="onScroll"
@@ -138,12 +135,11 @@
       <view class="scroll-bottom-spacer"></view>
     </scroll-view>
 
-    <!-- My favorites: fixed scroll-view -->
+    <!-- My favorites: fills remaining space, scrolls internally -->
     <scroll-view
-      v-if="topTab === 'favorites' && layoutReady"
-      class="template-list template-list-fixed"
+      v-if="topTab === 'favorites'"
+      class="template-list"
       scroll-y
-      :style="{ top: categoryBottom + 'px', height: favContentHeight + 'px' }"
     >
       <view v-if="favLoading" class="skeleton-list" style="padding: 24rpx 32rpx;">
         <view v-for="i in 3" :key="i" class="skeleton-card">
@@ -248,12 +244,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, nextTick } from 'vue'
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { ref, watch, computed, onMounted } from 'vue'
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { getTemplates, getTemplate, useTemplate, favoriteTemplate, getBoards, getBoard, type TemplateListParams } from '../index/api'
 import type { TemplateListItem, Template, TemplateCategory } from '../../../../shared/types'
 
-const props = withDefaults(defineProps<{ statusBarHeight?: number; capsuleTop?: number; tabbarHeight?: number }>(), { statusBarHeight: 0, capsuleTop: 0, tabbarHeight: 60 })
+const props = withDefaults(defineProps<{ capsuleTop?: number }>(), { capsuleTop: 0 })
 
 // ── Top tabs ──
 const topTab = ref<'discover' | 'favorites'>('discover')
@@ -319,23 +315,6 @@ const limit = 10
 const showBackToTop = ref(false)
 const scrollTopVal = ref(0)
 let lastScrollTop = 0
-
-// Fixed-overlay layout geometry (px). The plaza stacks several fixed layers
-// (sticky header → category tabs → sort bar → scrollable list). Their positions
-// are *measured* at runtime via boundingClientRect() in onMounted; we don't hard
-// code layer heights. Content that depends on measured values is gated behind
-// `layoutReady`, so these initial values are placeholders that are never used to
-// render the final layout — they only seed the refs before the first measure.
-const headerBottom = ref(props.capsuleTop)
-const categoryBottom = ref(props.capsuleTop)
-const sortBarBottom_ = ref(props.capsuleTop)
-// Viewport height (px); seeded from window info, then confirmed by measurement.
-const windowHeight = ref(uni.getWindowInfo().windowHeight || 0)
-const tabbarTop = ref(0)
-const layoutReady = ref(false)
-const contentTop = computed(() => sortBarBottom_.value - 12)
-const contentHeight = computed(() => tabbarTop.value - contentTop.value)
-const favContentHeight = computed(() => tabbarTop.value - categoryBottom.value)
 
 // My favorites: local keyword filter
 const filteredFavTemplates = computed(() => {
@@ -562,75 +541,8 @@ watch([currentCategory, currentSort], () => {
   fetchTemplates(true)
 })
 
-/**
- * Measure the fixed-layer geometry from the real rendered DOM.
- *
- * Each fixed layer's position derives from the measured bottom of the layer
- * above it — no hard-coded layer heights. Runs in three dependency-ordered
- * passes, each after the previous layer's reactive position has repainted:
- * pass 1 measures the sticky header + viewport (enough to reveal the gated
- * layers), pass 2 measures the category row + tabbar, and pass 3 measures the
- * sort bar (which only sits at its final position once the category row's
- * bottom is locked in). See the inline note below and PR #64 for why the sort
- * bar must be measured separately rather than alongside the category row.
- */
-function measureLayout() {
-  const q1 = uni.createSelectorQuery()
-  q1.select('.plaza-sticky-header').boundingClientRect()
-  q1.selectViewport().fields({ size: true }, () => {})
-  q1.exec((res) => {
-    const header = res?.[0] as { bottom?: number } | undefined
-    const viewport = res?.[1] as { height?: number } | undefined
-    if (header?.bottom && header.bottom > 0) {
-      headerBottom.value = header.bottom
-      // Category tabs sit right below the header; sort bar below the category
-      // row. Seed both from the header so the gated layers render in roughly the
-      // right place, then pass 2 corrects them from their own measured bottoms.
-      categoryBottom.value = header.bottom
-      sortBarBottom_.value = header.bottom
-    }
-    if (viewport?.height && viewport.height > 0) {
-      windowHeight.value = viewport.height
-      tabbarTop.value = viewport.height - props.tabbarHeight
-    }
-    // Reveal the gated layers, then measure them in dependency order. Each
-    // layer's `top` derives from the measured bottom of the layer above it, so
-    // we must measure sequentially: the category row only sits at its final
-    // position once `headerBottom` is set, and the sort bar only sits at its
-    // final position once `categoryBottom` is corrected. Measuring the sort bar
-    // in the same frame as the category row would read it at its stale,
-    // seed-based position and leave `contentTop` (and thus the list) shifted up
-    // under the fixed header. See PR #64 regression.
-    layoutReady.value = true
-    nextTick(() => {
-      // Pass 2: category row (now positioned below the measured header) + tabbar.
-      const q2 = uni.createSelectorQuery()
-      q2.select('.category-tabs-fixed').boundingClientRect()
-      q2.select('.custom-tabbar').boundingClientRect()
-      q2.exec((res2) => {
-        const cat = res2?.[0] as { bottom?: number } | undefined
-        const tabbar = res2?.[1] as { top?: number } | undefined
-        if (cat?.bottom && cat.bottom > 0) categoryBottom.value = cat.bottom
-        if (tabbar?.top && tabbar.top > 0) tabbarTop.value = tabbar.top
-        // Pass 3: sort bar — only now does it sit below the corrected category
-        // row, so its measured bottom (and therefore `contentTop`) is accurate.
-        nextTick(() => {
-          const q3 = uni.createSelectorQuery()
-          q3.select('.sort-bar-fixed').boundingClientRect()
-          q3.exec((res3) => {
-            const sort = res3?.[0] as { bottom?: number } | undefined
-            if (sort?.bottom && sort.bottom > 0) sortBarBottom_.value = sort.bottom
-          })
-        })
-      })
-    })
-  })
-}
-
 onMounted(() => {
   fetchTemplates(true)
-  // Measure after the first render so the sticky header has real dimensions.
-  nextTick(measureLayout)
 })
 
 onPullDownRefresh(async () => {
@@ -651,12 +563,10 @@ onPullDownRefresh(async () => {
   width: 100%;
 }
 
-.plaza-sticky-header {
-  background: rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+.plaza-header-stack {
+  flex: 0 0 auto;
+  background: #f5f5f5;
   border-bottom: 1rpx solid rgba(0, 0, 0, 0.06);
-  z-index: 100;
 }
 
 .plaza-header {
@@ -765,19 +675,11 @@ onPullDownRefresh(async () => {
 
 /* Category tabs */
 .category-tabs {
+  flex: 0 0 auto;
   white-space: nowrap;
   padding: 2rpx 24rpx;
   background: #f5f5f5;
 }
-
-.category-tabs-fixed {
-  position: fixed;
-  left: 0;
-  right: 0;
-  width: 100vw;
-  z-index: 99;
-}
-
 
 .category-tab {
   display: inline-flex;
@@ -802,17 +704,11 @@ onPullDownRefresh(async () => {
 
 /* Sort bar */
 .sort-bar {
+  flex: 0 0 auto;
   display: flex;
   padding: 12rpx 32rpx;
   gap: 24rpx;
-}
-
-.sort-bar-fixed {
-  position: fixed;
-  left: 0;
-  right: 0;
   background: #f5f5f5;
-  z-index: 98;
   border-bottom: 1rpx solid rgba(0, 0, 0, 0.06);
 }
 
@@ -829,19 +725,14 @@ onPullDownRefresh(async () => {
   border-bottom-color: #333;
 }
 
-/* Template list */
+/* Template list — fills remaining flex space and scrolls internally */
 .template-list {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 0;
   padding: 8rpx 24rpx 0;
   box-sizing: border-box;
   width: 100%;
-}
-
-.template-list-fixed {
-  position: fixed;
-  left: 0;
-  right: 0;
-  width: 100vw;
-  box-sizing: border-box;
 }
 
 .template-cards {
