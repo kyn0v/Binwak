@@ -99,7 +99,14 @@ onUnmounted(() => { uni.$off('switch-tab', onSwitchTab) })
 
 onLoad(() => {
   if (!safeGet(STORAGE_KEYS.ONBOARDED)) {
-    uni.redirectTo({ url: '/pages/welcome/welcome' })
+    // Use reLaunch (not redirectTo) for this entry-gate jump. main is the
+    // launch/home page, so redirectTo would replace the home page and leave
+    // welcome as a non-home single-stack page — WeChat then shows a 返回首页
+    // capsule, and calling redirectTo synchronously in the launch page's onLoad
+    // can be silently dropped before the nav stack is ready (user stranded on
+    // main). reLaunch clears the whole stack and makes welcome the sole page:
+    // no 返回首页 button, reliable on cold launch.
+    uni.reLaunch({ url: '/pages/welcome/welcome' })
     return
   }
   onboarded.value = true
