@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getUserDetail } from '../api'
+import { getUserDetail, deleteUser } from '../api'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const data = ref<any>(null)
 const loading = ref(true)
 const error = ref('')
+const deleting = ref(false)
 
 onMounted(async () => {
   try {
@@ -18,6 +19,22 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+async function onDelete() {
+  const u = data.value?.user
+  if (!u) return
+  const label = u.nickname || `用户 #${u.id}`
+  if (!window.confirm(`确定删除「${label}」及其全部数据（Bingo 卡、模板、词库、插画、收藏等）？\n此操作不可恢复。`)) return
+  deleting.value = true
+  try {
+    await deleteUser(Number(props.id))
+    router.push('/users')
+  } catch (e: any) {
+    window.alert(e.message || '删除失败')
+  } finally {
+    deleting.value = false
+  }
+}
 
 function formatDate(d: string) {
   return d ? d.replace('T', ' ').slice(0, 16) : '-'
@@ -38,6 +55,13 @@ function formatDate(d: string) {
         <div class="flex items-center gap-4 mb-3">
           <h2 class="text-lg font-bold text-gray-800">{{ data.user.nickname || '(未设置昵称)' }}</h2>
           <span class="text-sm text-gray-400">ID: {{ data.user.id }}</span>
+          <button
+            @click="onDelete"
+            :disabled="deleting"
+            class="ml-auto px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ deleting ? '删除中…' : '删除用户' }}
+          </button>
         </div>
         <div class="flex gap-6 text-sm text-gray-500">
           <span>注册: {{ formatDate(data.user.created_at) }}</span>

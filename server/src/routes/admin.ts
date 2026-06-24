@@ -208,6 +208,41 @@ router.get('/users/:id', (req: Request, res: Response): void => {
   } as ApiResponse)
 })
 
+// ── DELETE /api/admin/users/:id ── 删除用户及其全部数据
+router.delete('/users/:id', (req: Request, res: Response): void => {
+  const db = getDb()
+  const userId = parseInt(req.params.id as string)
+  if (!Number.isFinite(userId) || userId < 1) {
+    res.status(400).json({ success: false, error: '无效的用户 ID' } as ApiResponse)
+    return
+  }
+
+  const user = db.prepare('SELECT id, kind FROM users WHERE id = ?').get(userId) as
+    | { id: number; kind: string }
+    | undefined
+  if (!user) {
+    res.status(404).json({ success: false, error: '用户不存在' } as ApiResponse)
+    return
+  }
+  // The admin's own backing account (kind='system', see ensureSystemAdminUser)
+  // owns shared defaults (e.g. seeded plaza templates); removing it would break
+  // the admin site / plaza, so it is protected.
+  if (user.kind === 'system') {
+    res.status(403).json({ success: false, error: '系统账号不可删除' } as ApiResponse)
+    return
+  }
+
+  // foreign_keys is ON (database.ts) and every user_id FK is ON DELETE CASCADE,
+  // so deleting the user row also clears their boards/cells/templates/
+  // template_cells/word_banks/illustrations/favorites/uses. Uploaded image files
+  // on disk are intentionally left in place: some storage keys can be shared
+  // (e.g. seeded illustrations), and removing them could affect other users —
+  // orphaned files are harmless and can be garbage-collected separately.
+  const info = db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+
+  res.json({ success: true, data: { deleted: info.changes } } as ApiResponse)
+})
+
 // ── GET /api/admin/templates/:id ── Get single template with cells
 router.get('/templates/:id', (req: Request, res: Response): void => {
   const db = getDb()

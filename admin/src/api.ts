@@ -61,6 +61,12 @@ export async function getUserDetail(id: number) {
   return request<any>(`/api/admin/users/${id}`)
 }
 
+export async function deleteUser(id: number) {
+  return request<{ deleted: number }>(`/api/admin/users/${id}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function getTemplates(params: { page?: number; limit?: number; status?: string; category?: string; search?: string; sort?: string } = {}) {
   const qs = new URLSearchParams()
   if (params.page) qs.set('page', String(params.page))
