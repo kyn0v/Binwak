@@ -74,13 +74,17 @@ let touchStartX = 0
 
 async function tryLogin() {
   try {
-    const res = await login()
-    if (!res.isNewUser) {
-      safeSet(STORAGE_KEYS.ONBOARDED, 'true')
-      uni.reLaunch({ url: '/pages/main/main' })
-    }
+    // Log in for BOTH new and existing users, then enter the app via the same
+    // clean reLaunch path. Previously only existing users (!isNewUser) were
+    // navigated to main, so a brand-new user was left stranded on welcome with
+    // ONBOARDED already set. A later incidental relaunch then dropped them onto
+    // a half-initialised main reached through a non-clean route, where the
+    // position:fixed custom tabbar fails to paint on the first iOS WeChat frame
+    // (homepage visible but no tabbar, with the 返回首页 button showing).
+    await login()
+    uni.reLaunch({ url: '/pages/main/main' })
   } catch {
-    // Login failed (offline, etc.) — continue with onboarding
+    // Login failed (offline, etc.) — stay on welcome so the user can retry.
   }
 }
 
