@@ -27,7 +27,13 @@ module.exports = {
     'mp-weixin': {
       port: 9420,
       launch: true, // let the runner boot DevTools
-      teardown: 'disconnect', // leave the IDE open after the run
+      // Leave the IDE open after the run (handy for inspecting state). The
+      // trade-off: the launched instance keeps LISTENING on `port` (9420), so a
+      // FOLLOW-UP run's `launch: true` would spawn a second instance that can't
+      // bind 9420 and deadlocks jest at `RUNS`. The `pretest:e2e:mp` npm hook
+      // (node tests/e2e/free-port.js 9420) frees the port before each run to
+      // break that cycle — keep the two in sync if you change this port.
+      teardown: 'disconnect',
       // Built bundle the IDE should open.
       projectPath: path.resolve(__dirname, 'dist/build/mp-weixin'),
       executablePath: WX_CLI,

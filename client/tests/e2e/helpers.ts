@@ -39,6 +39,10 @@ export async function seedFixtures(): Promise<void> {
         id: i,
         title,
         completed: i % 3 === 0, // a fixed, reproducible completion pattern
+        // Mock a photo in the first cell so the board exercises the image-cell
+        // render path. /static/logo.png is bundled, so it renders offline and
+        // produces reproducible pixels (unlike a remote upload URL).
+        ...(i === 0 ? { imagePath: '/static/logo.png' } : {}),
       }))
       wx.setStorageSync('binwak-onboarded', 'true')
       wx.setStorageSync('binwak-bingo-grid-size', GRID)

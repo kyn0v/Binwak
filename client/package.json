@@ -37,6 +37,7 @@
     "type-check": "vue-tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
+    "pretest:e2e:mp": "node tests/e2e/free-port.js 9420",
     "test:e2e:mp": "cross-env NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= http_proxy= https_proxy= all_proxy= UNI_PLATFORM=mp-weixin NODE_ENV=development jest --config jest.e2e.config.js --runInBand",
     "test:e2e:h5": "cross-env NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= http_proxy= https_proxy= all_proxy= UNI_PLATFORM=h5 NODE_ENV=development jest --config jest.e2e.config.js --runInBand"
   },
