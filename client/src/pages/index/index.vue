@@ -339,10 +339,11 @@ import { useCanvasExport, preWarmLocalPaths } from './useCanvasExport'
 import { useCardStyle } from './cardStyles'
 import { useAuth } from './useAuth'
 import { useSync, defaultBoardTitle } from './useSync'
-import { deleteBoard, resolveApiUrl, matchIllustrations, getProfile } from './api'
+import { deleteBoard, resolveApiUrl, getProfile } from './api'
 import { usePrivateImage } from './usePrivateImage'
 import { usePhotoNotice } from './usePhotoNotice'
 import { useIllustMode } from './useIllustMode'
+import { useWordPicker } from './useWordPicker'
 import { useMilestoneToast } from './useMilestoneToast'
 import { getBoardState as boardStateOf } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
@@ -353,10 +354,6 @@ import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
 const isLoading = ref(true)
 const isEditMode = ref(false)
 const showSizePicker = ref(false)
-const showWordPicker = ref(false)
-const manualAssignTarget = ref<number | null>(null)
-const wordSearch = ref('')
-const pickerNewWord = ref('')
 const showSharePanel = ref(false)
 const shareCodeText = ref('')
 const importCodeText = ref('')
@@ -456,6 +453,19 @@ const {
   mergeWords,
 } = useWordBank()
 
+// Word picker (edit-mode word assignment overlay). Shares illustCache with
+// useIllustMode to avoid redundant illustration look-ups.
+const {
+  showWordPicker,
+  wordSearch,
+  pickerNewWord,
+  filteredWordBank,
+  openWordPicker,
+  assignWordToTarget,
+  addAndAssignWord,
+  closeWordPicker,
+} = useWordPicker({ cells, wordBank, addWord, illustCache })
+
 // Board switcher state
 const showBoardSwitcher = ref(false)
 
@@ -516,12 +526,6 @@ const progressPercent = computed(() => {
   const target = progressTarget.value
   if (target === 0) return 100
   return Math.min(100, Math.round((completedCount.value / target) * 100))
-})
-
-const filteredWordBank = computed(() => {
-  const query = wordSearch.value.trim().toLowerCase()
-  if (!query) return wordBank.value
-  return wordBank.value.filter((word) => word.toLowerCase().includes(query))
 })
 
 /** Set of words currently on the board */
@@ -673,79 +677,6 @@ async function onCreateWithSize(size: number) {
   } else {
     uni.showToast({ title: '创建失败', icon: 'none' })
   }
-}
-
-// ── word picker (edit mode) ──
-function openWordPicker(index: number) {
-  manualAssignTarget.value = index
-  wordSearch.value = ''
-  pickerNewWord.value = ''
-  showWordPicker.value = true
-  // Pre-fetch illustrations for all word bank words (cache miss only)
-  const uncached = wordBank.value.filter(w => !illustCache.has(w))
-  if (uncached.length > 0) {
-    matchIllustrations(uncached).then(matches => {
-      for (const word of uncached) {
-        const info = matches[word]
-        illustCache.set(word, info ? info.illustrationUrl : 'none')
-      }
-    }).catch(() => {})
-  }
-}
-
-function assignWordToTarget(word: string) {
-  const targetIndex = manualAssignTarget.value
-  if (targetIndex === null) return
-  const cell = cells.value[targetIndex]
-  if (!cell) return
-  cell.title = word
-  cell.imagePath = undefined
-  cell.illustrationPath = undefined
-  cell.completed = false
-  showWordPicker.value = false
-  manualAssignTarget.value = null
-  // Auto-populate illustration for this word
-  const cachedUrl = illustCache.get(word)
-  if (cachedUrl && cachedUrl !== 'none') {
-    cell.illustrationPath = cachedUrl
-  } else if (cachedUrl === undefined) {
-    // Not yet looked up: call the API and cache the result
-    matchIllustrations([word]).then(matches => {
-      if (matches[word]) {
-        illustCache.set(word, matches[word].illustrationUrl)
-        cell.illustrationPath = matches[word].illustrationUrl
-        preWarmLocalPaths([matches[word].illustrationUrl])
-      } else {
-        illustCache.set(word, 'none')
-      }
-    }).catch(() => {})
-  }
-}
-
-async function addAndAssignWord() {
-  const text = pickerNewWord.value.trim()
-  if (!text) {
-    uni.showToast({ title: '请输入词语', icon: 'none' })
-    return
-  }
-  const result = await addWord(text)
-  if (result === 'moderation_fail') {
-    uni.showToast({ title: '内容含违规信息，请修改', icon: 'none' })
-    return
-  }
-  if (result !== 'ok') {
-    uni.showToast({ title: result === 'duplicate' ? '该词已存在' : '添加失败', icon: 'none' })
-    return
-  }
-  pickerNewWord.value = ''
-  assignWordToTarget(text)
-}
-
-function closeWordPicker() {
-  showWordPicker.value = false
-  manualAssignTarget.value = null
-  wordSearch.value = ''
-  pickerNewWord.value = ''
 }
 
 // ── cell tap ──
