@@ -342,6 +342,7 @@ import { useSync, defaultBoardTitle } from './useSync'
 import { deleteBoard, resolveApiUrl, matchIllustrations, getProfile } from './api'
 import { usePrivateImage } from './usePrivateImage'
 import { usePhotoNotice } from './usePhotoNotice'
+import { useMilestoneToast } from './useMilestoneToast'
 import { getBoardState as boardStateOf, defaultIllustModeOn } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
@@ -556,27 +557,6 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((completedCount.value / target) * 100))
 })
 
-const bingoMultiplier = computed(() => {
-  const count = bingoLineCount.value
-  const labels = ['', '', 'Double', 'Triple', 'Quadra', 'Penta', 'Hexa', 'Hepta', 'Octa', 'Mega', 'Ultra', 'Godlike', 'Beyond Godlike']
-  return count >= 2 ? (labels[count] || 'Beyond Godlike') : ''
-})
-
-const bingoDescriptor = computed(() => {
-  const count = bingoLineCount.value
-  const labels = ['', 'Bingo Line!', 'Double!', 'Triple!', 'Quadra!', 'Penta!', 'Hexa!', 'Hepta!', 'Octa!', 'Mega!', 'Ultra!', 'Godlike!', 'Beyond Godlike!']
-  return labels[count] || 'Beyond Godlike!'
-})
-
-const bingoOrdinal = computed(() => {
-  const count = bingoLineCount.value
-  if (count <= 0) return ''
-  const suffixes = ['th', 'st', 'nd', 'rd']
-  const v = count % 100
-  const suffix = (v >= 11 && v <= 13) ? 'th' : (suffixes[v % 10] || 'th')
-  return `${count}${suffix} line`
-})
-
 const filteredWordBank = computed(() => {
   const query = wordSearch.value.trim().toLowerCase()
   if (!query) return wordBank.value
@@ -686,7 +666,7 @@ function cancelEditMode() {
 function onChangeGridSize(size: number) {
   closeMenu()
   changeGridSize(size)
-  lastMilestoneShown = 0
+  resetProgressMilestones()
   showMilestone('🔄', `已切换为 ${size}×${size}`)
 }
 
@@ -723,7 +703,7 @@ async function onCreateWithSize(size: number) {
   uni.hideLoading()
 
   if (result) {
-    lastMilestoneShown = 0
+    resetProgressMilestones()
     currentPublishedTemplateId.value = null
     if (result.theme && result.theme !== currentThemeId.value) {
       setTheme(result.theme)
@@ -978,38 +958,18 @@ async function pickImage(index: number) {
   }
 }
 
-// Track last shown milestone to avoid duplicate toasts
-let lastMilestoneShown = 0
-const milestoneToast = ref<{ emoji: string; msg: string } | null>(null)
-const milestoneExiting = ref(false)
-let milestoneTimer: ReturnType<typeof setTimeout> | null = null
+// Milestone toast (state + auto-dismiss timer + progress thresholds in composable)
+const {
+  milestoneToast,
+  milestoneExiting,
+  showMilestone,
+  showProgressToast: _showProgressToast,
+  resetProgressMilestones,
+} = useMilestoneToast()
 
-function showMilestone(emoji: string, msg: string) {
-  if (milestoneTimer) clearTimeout(milestoneTimer)
-  milestoneExiting.value = false
-  milestoneToast.value = { emoji, msg }
-  milestoneTimer = setTimeout(() => {
-    milestoneExiting.value = true
-    setTimeout(() => { milestoneToast.value = null }, 400)
-  }, 2500)
-}
-
+// Thin wrapper so call sites stay argument-free (uses current board counts).
 function showProgressToast() {
-  const completed = completedCount.value
-  const total = totalCount.value
-  // First completion
-  if (completed === 1 && lastMilestoneShown < 1) {
-    lastMilestoneShown = 1
-    showMilestone('🚶', 'CityWalk 已启程')
-    return
-  }
-  // 50% milestone — trigger when crossing the halfway mark
-  const halfPoint = Math.ceil(total / 2)
-  if (completed === halfPoint && lastMilestoneShown < halfPoint) {
-    lastMilestoneShown = halfPoint
-    showMilestone('🔥', '已过半，继续加油')
-    return
-  }
+  _showProgressToast(completedCount.value, totalCount.value)
 }
 
 function previewCellImage(index: number) {
@@ -1167,7 +1127,7 @@ async function onApplyShareCode() {
     return
   }
 
-  lastMilestoneShown = 0
+  resetProgressMilestones()
   currentPublishedTemplateId.value = null
   applyTitles(parsed.titles)
   pushWordBank(wordBank.value)
@@ -1222,7 +1182,7 @@ const onTemplateApplied = async (data: TemplateAppliedData) => {
   if (result?.theme) {
     setTheme(result.theme)
   }
-  lastMilestoneShown = 0
+  resetProgressMilestones()
 
   // After switching templates, refresh illustrations (mirrors the board-switch flow)
   illustCache.clear()
