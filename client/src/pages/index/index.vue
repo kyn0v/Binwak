@@ -342,8 +342,9 @@ import { useSync, defaultBoardTitle } from './useSync'
 import { deleteBoard, resolveApiUrl, matchIllustrations, getProfile } from './api'
 import { usePrivateImage } from './usePrivateImage'
 import { usePhotoNotice } from './usePhotoNotice'
+import { useIllustMode } from './useIllustMode'
 import { useMilestoneToast } from './useMilestoneToast'
-import { getBoardState as boardStateOf, defaultIllustModeOn } from './boardState'
+import { getBoardState as boardStateOf } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
 import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
@@ -364,56 +365,6 @@ const isActionSheetOpen = ref(false)
 const cellResolvedUrls = ref<Record<number, string>>({})
 const isPickingImage = ref(false)
 const cellPreviewIndex = ref(-1)
-
-
-// Illustration mode — per-board preference
-const ILLUST_MODE_PREFIX = STORAGE_KEYS.ILLUST_MODE_PREFIX
-const isIllustMode = ref(false)
-const illustLoading = ref(false)
-
-function illustModeKey() {
-  const bid = remoteBoardId.value
-  return bid ? `${ILLUST_MODE_PREFIX}${bid}` : ''
-}
-
-function loadIllustMode() {
-  const key = illustModeKey()
-  if (!key) {
-    isIllustMode.value = false
-    return
-  }
-  const stored = safeGet(key)
-  if (stored === undefined) {
-    // No explicit preference yet: default ON if the board has any illustration-bearing cells
-    isIllustMode.value = defaultIllustModeOn(cells.value)
-  } else {
-    isIllustMode.value = !!stored
-  }
-}
-
-async function toggleIllustMode() {
-  const wantIllust = !isIllustMode.value
-  isIllustMode.value = wantIllust
-  const key = illustModeKey()
-  if (key) safeSet(key, wantIllust)
-
-  if (wantIllust) {
-    const ok = await autoPopulateIllustrations()
-    if (!ok) {
-      // Fetch failed → fall back to text mode
-      isIllustMode.value = false
-      if (key) safeSet(key, false)
-      return
-    }
-    // No matching illustrations at all → toast and fall back
-    const hasAny = cells.value.some(c => c.illustrationPath)
-    if (!hasAny) {
-      uni.showToast({ title: '当前词语暂无匹配插画', icon: 'none' })
-      isIllustMode.value = false
-      if (key) safeSet(key, false)
-    }
-  }
-}
 
 // Photo privacy notice (one-shot consent modal — state + logic in composable)
 const {
@@ -480,6 +431,16 @@ const {
   isLoadingFromRemote,
   loadBoardTitle,
 } = useBingoBoard()
+
+// Illustration mode (per-board preference + word→illustration cache + fetch logic).
+// illustCache is exposed because the word picker shares it.
+const {
+  isIllustMode,
+  illustCache,
+  loadIllustMode,
+  toggleIllustMode,
+  autoPopulateIllustrations,
+} = useIllustMode({ cells, remoteBoardId, persistState })
 
 const {
   previewImagePath,
@@ -712,60 +673,6 @@ async function onCreateWithSize(size: number) {
   } else {
     uni.showToast({ title: '创建失败', icon: 'none' })
   }
-}
-
-/** Client-side cache: word → illustrationUrl ('none' means checked-no-illustration) */
-const illustCache = new Map<string, string>()
-let _illustFetching = false
-
-/**
- * Fetch matching illustrations for current cell words and populate illustrationPath.
- * Returns true if successful (or nothing to fetch), false if API failed.
- */
-async function autoPopulateIllustrations(): Promise<boolean> {
-  if (_illustFetching) return true // already in progress
-  const words = cells.value.map(c => c.title).filter(Boolean)
-  if (words.length === 0) return true
-
-  const uncached = words.filter(w => !illustCache.has(w))
-
-  if (uncached.length > 0) {
-    _illustFetching = true
-    illustLoading.value = true
-    try {
-      const matches = await matchIllustrations(uncached)
-      for (const word of uncached) {
-        const info = matches[word]
-        illustCache.set(word, info ? info.illustrationUrl : 'none')
-      }
-    } catch {
-      uni.showToast({ title: '插画加载失败，请重试', icon: 'none' })
-      _illustFetching = false
-      illustLoading.value = false
-      return false
-    } finally {
-      _illustFetching = false
-      illustLoading.value = false
-    }
-  }
-
-  let changed = false
-  for (const cell of cells.value) {
-    const url = cell.title ? illustCache.get(cell.title) : undefined
-    if (url && url !== 'none' && cell.illustrationPath !== url) {
-      cell.illustrationPath = url
-      changed = true
-    }
-  }
-  if (changed) {
-    persistState()
-  }
-  // Pre-warm canvas local path cache so first preview is fast
-  const urlsToWarm = cells.value
-    .flatMap(c => [c.illustrationPath, c.imagePath])
-    .filter(Boolean) as string[]
-  if (urlsToWarm.length) preWarmLocalPaths(urlsToWarm)
-  return true
 }
 
 // ── word picker (edit mode) ──
