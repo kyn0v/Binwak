@@ -28,6 +28,11 @@ const boardTitle = ref('')
 const showBingo = ref(false)
 const bingoLineCount = ref(0)
 const lastSeenLineCount = ref(0)
+// completedCount captured at the moment a NEW bingo line was last formed.
+// While completedCount still equals this, we "freeze" the progress display on
+// the just-achieved bingo (已完成 ×N 🏆 / 100%); marking the next cell makes
+// completedCount diverge and the bar resumes tracking the next line. -1 = none.
+const lastBingoCompletedCount = ref(-1)
 
 /**
  * Guard flag – while true the cells watcher should NOT push to server.
@@ -59,7 +64,7 @@ function createDefaultCells(size: number): BingoCell[] {
   }))
 }
 
-function getBingoLines(source: BingoCell[], gridSize: number) {
+function getAllLines(gridSize: number): number[][] {
   const lines: number[][] = []
 
   for (let row = 0; row < gridSize; row += 1) {
@@ -86,7 +91,11 @@ function getBingoLines(source: BingoCell[], gridSize: number) {
   }
   lines.push(diag1, diag2)
 
-  return lines.filter((line) => line.every((idx) => source[idx]?.completed))
+  return lines
+}
+
+function getBingoLines(source: BingoCell[], gridSize: number) {
+  return getAllLines(gridSize).filter((line) => line.every((idx) => source[idx]?.completed))
 }
 
 function sanitizeCells(saved: BingoState, gridSize: number) {
@@ -119,6 +128,39 @@ export function useBingoBoard() {
   const totalCount = computed(() => cells.value.length)
   const isAllDone = computed(() => completedCount.value === totalCount.value && totalCount.value > 0)
 
+  /**
+   * True right after a new Bingo line forms, until the user marks another cell.
+   * Used to freeze the progress bar on the just-achieved bingo (已完成 ×N 🏆)
+   * instead of immediately jumping the denominator to the next line's target.
+   */
+  const bingoJustCompleted = computed(() =>
+    bingoLineCount.value > 0 && completedCount.value === lastBingoCompletedCount.value
+  )
+
+  /**
+   * Progress denominator shown in the bar = completedCount + the minimum number
+   * of cells still needed to finish the *closest* incomplete Bingo line (its
+   * geometric minimum remaining). This shrinks as the user nears any line, e.g.
+   * on a 4×4 after the first row, the closest column still needs 3 → 5/7 once
+   * one more cell of that column is marked.
+   *
+   * While a bingo is "frozen" (a line just formed, before the next cell is
+   * marked) the denominator collapses to completedCount so the bar reads as
+   * fully complete for the achieved line (e.g. 4/4 at 100%, 已完成 ×N).
+   */
+  const progressTarget = computed(() => {
+    if (bingoJustCompleted.value) return completedCount.value
+    const lines = getAllLines(gridSize.value)
+    const incomplete = lines.filter(
+      (line) => !line.every((idx) => cells.value[idx]?.completed)
+    )
+    if (incomplete.length === 0) return completedCount.value // all lines done (isAllDone)
+    const minRemaining = Math.min(
+      ...incomplete.map((line) => line.filter((idx) => !cells.value[idx]?.completed).length)
+    )
+    return completedCount.value + minRemaining
+  })
+
   /** Set of cell indices that belong to a completed bingo line */
   const bingoLineIndices = computed(() => {
     const lines = getBingoLines(cells.value, gridSize.value)
@@ -138,6 +180,8 @@ export function useBingoBoard() {
   }
 
   function loadState() {
+    // A freshly loaded board is mid-progress, never a just-achieved bingo.
+    lastBingoCompletedCount.value = -1
     // Load grid size
     const savedSize = safeGet<number>(GRID_SIZE_KEY)
     if (savedSize && GRID_SIZE_OPTIONS.includes(savedSize)) {
@@ -175,6 +219,7 @@ export function useBingoBoard() {
     showBingo.value = false
     bingoLineCount.value = 0
     lastSeenLineCount.value = 0
+    lastBingoCompletedCount.value = -1
     persistState()
   }
 
@@ -188,6 +233,7 @@ export function useBingoBoard() {
         showBingo.value = false
         bingoLineCount.value = 0
         lastSeenLineCount.value = 0
+        lastBingoCompletedCount.value = -1
         safeRemove(STORAGE_KEY)
         onConfirmed?.()
       },
@@ -202,14 +248,26 @@ export function useBingoBoard() {
 
   function checkBingo() {
     const count = currentLineCount()
+    const prevCount = bingoLineCount.value
     bingoLineCount.value = count
-    if (count <= 0) return
-    if (count <= lastSeenLineCount.value) return
 
-    // New line(s) completed — show celebration
-    lastSeenLineCount.value = count
-    showBingo.value = true
-    // No auto-dismiss; user must tap to close
+    // Freeze trigger: decoupled from the celebration's all-time-max guard. The
+    // freeze must engage whenever THIS cell-mark increases the line count, even
+    // if the same line existed earlier in the session (lastSeenLineCount is
+    // sticky-high and would otherwise suppress it → bug: 3/4 →(bingo)→ 4/7
+    // instead of 4/4). Capturing completedCount here makes the progress bar
+    // read N/N (已完成 ×k) until the next cell is marked.
+    if (count > prevCount) {
+      lastBingoCompletedCount.value = completedCount.value
+    }
+
+    // Celebration: only for a NEW all-time-max line count, so we don't
+    // re-celebrate a milestone the user has already seen.
+    if (count > 0 && count > lastSeenLineCount.value) {
+      lastSeenLineCount.value = count
+      showBingo.value = true
+      // No auto-dismiss; user must tap to close
+    }
   }
 
   function dismissBingo() {
@@ -244,6 +302,8 @@ export function useBingoBoard() {
     centerIndex,
     completedCount,
     totalCount,
+    progressTarget,
+    bingoJustCompleted,
     isAllDone,
     resetBoard,
     toggleComplete,
@@ -259,6 +319,11 @@ export function useBingoBoard() {
       const count = currentLineCount()
       bingoLineCount.value = count
       lastSeenLineCount.value = count
+      // NOTE: deliberately do NOT touch lastBingoCompletedCount here. syncLineCount
+      // runs on every sync roundtrip (applyRemoteBoard writes the cells back after
+      // a push), so resetting it would clear the just-achieved-bingo freeze the
+      // instant the user completes a line. The freeze clears naturally when the
+      // user marks another cell (completedCount diverges from the captured value).
     },
     /** True while useSync is writing remote data into cells/boardTitle */
     isLoadingFromRemote: () => _loadingFromRemote,

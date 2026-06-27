@@ -2,9 +2,10 @@
  * Interaction E2E for the home (challenge) tab.
  *
  * Drives real user interactions against the mp-weixin runtime via uni-automator:
- * the settings menu, board switcher, illustration-mode toggle, and completing a
- * cell to trigger the Bingo celebration. Cell completion goes through a native
- * ActionSheet, so we mock uni.showActionSheet to return a fixed choice.
+ * the board switcher (which now also hosts the card actions formerly in the
+ * settings menu), illustration-mode toggle, and completing a cell to trigger
+ * the Bingo celebration. Cell completion goes through a native ActionSheet, so
+ * we mock uni.showActionSheet to return a fixed choice.
  */
 import {
   gotoMain,
@@ -17,26 +18,6 @@ import {
 declare const program: any
 
 describe('home interactions', () => {
-  describe('settings menu', () => {
-    let page: any
-    beforeAll(async () => {
-      await seedFixtures()
-      page = await gotoMain()
-    }, 120000)
-
-    it('opens the settings dropdown', async () => {
-      const btn = await page.$('.settings-button')
-      expect(btn).toBeTruthy()
-      await btn.tap()
-      await page.waitFor(800)
-      const menu = await page.$('.dropdown-menu')
-      expect(menu).toBeTruthy()
-      // menu contains actionable items
-      const items = await page.$$('.menu-item')
-      expect(items.length).toBeGreaterThan(0)
-    })
-  })
-
   describe('board switcher', () => {
     let page: any
     beforeAll(async () => {
@@ -51,6 +32,30 @@ describe('home interactions', () => {
       await page.waitFor(800)
       const dropdown = await page.$('.board-dropdown')
       expect(dropdown).toBeTruthy()
+    })
+
+    it('exposes the consolidated card actions in the dropdown', async () => {
+      // The settings menu was removed; its actions live in this dropdown.
+      // The board list and 重置 were also removed, and 管理全部卡片 is now the
+      // first entry. Expect: 创建卡片 entry + 管理/编辑/预览/分享 actions.
+      const create = await page.$('.dropdown-create-text')
+      expect(create).toBeTruthy()
+      const actions = await page.$$('.dropdown-action')
+      // 管理全部卡片 / 编辑卡片 / 预览卡片 / 分享 (+ optional 发布到广场)
+      expect(actions.length).toBeGreaterThanOrEqual(4)
+    })
+
+    it('dropdown items are tappable (not covered by the close overlay)', async () => {
+      // Regression guard for the z-index fix: the full-screen tap-to-close
+      // overlay must NOT sit above the dropdown, or its actions would be
+      // unclickable. Tapping 创建卡片 toggles the size picker open in-place;
+      // if the overlay intercepted the tap, the switcher would close instead.
+      const createRow = await page.$('.dropdown-create')
+      expect(createRow).toBeTruthy()
+      await createRow.tap()
+      await page.waitFor(400)
+      const picker = await page.$('.size-picker')
+      expect(picker).toBeTruthy()
     })
   })
 

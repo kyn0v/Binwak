@@ -1,69 +1,37 @@
 <template>
   <view class="page" :class="{ 'page-edit-mode': isEditMode }" :style="[getThemeStyle(), pageStyle]" @tap="onPageTap">
     <view class="header" :style="headerStyle">
+      <!-- Row 1: app title (right side kept clear for the WeChat capsule) -->
       <view class="header-top">
         <view class="title-group">
           <text class="title-art">Binwak🚶</text>
-          <text class="title-subtitle">「Citywalk Bingo!」</text>
         </view>
       </view>
-    </view>
 
-    <view class="grid-area">
-      <!-- Content area header: illustration-mode toggle right-aligned, in the same flow as the board -->
-      <view class="grid-header" :style="gridHeaderStyle">
-        <view class="grid-header-top">
-          <view class="grid-header-left">
-            <view class="board-name-row" @tap.stop="onOpenBoardSwitcher">
-            <text class="board-name">{{ boardTitle }}</text>
-            <text class="board-name-arrow" :class="{ 'arrow-up': showBoardSwitcher }">▾</text>
-            <view v-if="!loggedIn && offlineReason" class="offline-badge" @tap.stop="showOfflineDetail">
-              <text class="offline-icon">⚡</text>
-              <text class="offline-text">离线</text>
-            </view>
-            <!-- Board switcher dropdown -->
-            <view v-if="showBoardSwitcher" class="board-dropdown" @tap.stop>
-              <view v-if="switcherLoading" class="dropdown-loading">
-                <text>加载中...</text>
-              </view>
-              <template v-else>
-                <view
-                  v-for="board in switcherBoards"
-                  :key="board.id"
-                  class="dropdown-board-item"
-                  :class="{ 'dropdown-board-active': board.isActive }"
-                  @tap.stop="onSwitcherSelect(board)"
-                >
-                  <view class="dropdown-board-info">
-                    <text class="dropdown-board-title">{{ board.title }}</text>
-                    <text v-if="board.isActive" class="dropdown-current-tag">当前</text>
-                  </view>
-                  <text class="dropdown-board-meta">{{ board.completedCount || 0 }}/{{ board.totalCount || board.gridSize * board.gridSize }}</text>
-                </view>
-                <view class="dropdown-create-row">
-                  <view class="dropdown-board-item dropdown-create" @tap.stop="onSwitcherCreate">
-                    <text class="dropdown-create-text">+ 新建Bingo卡</text>
-                  </view>
-                </view>
-                <view class="dropdown-board-item dropdown-manage" @tap.stop="goToBoards">
-                  <text class="dropdown-manage-text">管理全部 →</text>
-                </view>
-              </template>
-            </view>
+      <!-- Row 2: subtitle (left) + edit-mode badge (right) -->
+      <view class="header-row header-subtitle-row">
+        <text class="title-subtitle">「Citywalk Bingo!」</text>
+        <text v-if="isEditMode" class="edit-mode-badge">编辑中…</text>
+      </view>
+
+      <!-- Row 3: board switcher (left) + illustration-mode toggle (right) -->
+      <view class="header-row header-controls-row">
+        <view class="board-name-row" @tap.stop="onOpenBoardSwitcher">
+          <text class="board-name">{{ boardTitle }}</text>
+          <text class="board-name-arrow" :class="{ 'arrow-up': showBoardSwitcher }">▾</text>
+          <view v-if="!loggedIn && offlineReason" class="offline-badge" @tap.stop="showOfflineDetail">
+            <text class="offline-icon">⚡</text>
+            <text class="offline-text">离线</text>
           </view>
-          <view v-if="!isEditMode" class="mode-switch-row" @tap.stop="toggleIllustMode">
-            <view class="ios-switch" :class="{ 'ios-switch-on': isIllustMode }">
-              <view class="ios-switch-thumb"></view>
+          <!-- Board switcher dropdown -->
+          <view v-if="showBoardSwitcher" class="board-dropdown" @tap.stop>
+            <view class="dropdown-board-item dropdown-action dropdown-action-manage" @tap.stop="goToBoards">
+              <text class="dropdown-action-text dropdown-action-text-strong">管理全部卡片 →</text>
             </view>
-            <text class="mode-switch-label">{{ isIllustMode ? '插画模式' : '文本模式' }}</text>
-          </view>
-          </view>
-          <view v-if="!isEditMode" class="menu-anchor">
-            <button class="settings-button" :class="{ 'settings-active': showMenu }" size="mini" hover-class="none" @tap.stop="toggleMenu">⚙️ 设置</button>
-          <view v-if="showMenu" class="dropdown-menu" @tap.stop>
-            <view class="menu-group">
-              <view class="menu-item" @tap.stop="showSizePicker = !showSizePicker">
-                <text>创建卡片</text>
+            <!-- create card (replaces 新建Bingo卡; reuses the size picker) -->
+            <view class="dropdown-create-row">
+              <view class="dropdown-board-item dropdown-create dropdown-action-top" @tap.stop="showSizePicker = !showSizePicker">
+                <text class="dropdown-create-text">创建卡片</text>
                 <text class="size-label">{{ gridSize }}×{{ gridSize }}</text>
               </view>
               <view v-if="showSizePicker" class="size-picker">
@@ -72,29 +40,46 @@
                   :key="s"
                   class="size-option"
                   :class="{ 'size-active': s === gridSize }"
-                  @tap="onCreateWithSize(s)"
+                  @tap.stop="onCreateWithSize(s)"
                 >
                   <text>{{ s }}×{{ s }}</text>
                 </view>
               </view>
-              <view class="menu-item" @tap="onManualEdit">编辑卡片</view>
-              <view class="menu-item" @tap="onPreviewCard">预览卡片</view>
             </view>
-            <!-- Share / export -->
-            <view class="menu-group">
-              <view class="menu-item" @tap="onOpenSharePanel">分享/应用Bingo码</view>
-              <view v-if="ENABLE_TEMPLATE_PUBLISHING" class="menu-item" :class="{ 'menu-item-disabled': !!currentPublishedTemplateId }" @tap="onOpenPublishPanel">{{ currentPublishedTemplateId ? '已发布 📤' : '发布到广场' }}</view>
+            <!-- card actions -->
+            <view class="dropdown-board-item dropdown-action dropdown-action-top" @tap.stop="onManualEdit">
+              <text class="dropdown-action-text">编辑卡片</text>
             </view>
-            <view class="menu-divider"></view>
-            <!-- Manage -->
-            <view class="menu-group">
-              <view class="menu-item danger" @tap="onResetBoard">重置</view>
+            <view class="dropdown-board-item dropdown-action" @tap.stop="onPreviewCard">
+              <text class="dropdown-action-text">预览卡片</text>
+            </view>
+            <view class="dropdown-board-item dropdown-action" @tap.stop="onOpenSharePanel">
+              <text class="dropdown-action-text">分享/应用Bingo码</text>
+            </view>
+            <view v-if="ENABLE_TEMPLATE_PUBLISHING" class="dropdown-board-item dropdown-action" :class="{ 'dropdown-action-disabled': !!currentPublishedTemplateId }" @tap.stop="onOpenPublishPanel">
+              <text class="dropdown-action-text">{{ currentPublishedTemplateId ? '已发布 📤' : '发布到广场' }}</text>
             </view>
           </view>
         </view>
-        <text v-else class="edit-mode-badge">编辑中…</text>
+        <view v-if="!isEditMode" class="mode-switch-row" @tap.stop="toggleIllustMode">
+          <text class="mode-switch-label">{{ isIllustMode ? '插画模式' : '文本模式' }}</text>
+          <view class="ios-switch" :class="{ 'ios-switch-on': isIllustMode }">
+            <view class="ios-switch-thumb"></view>
+          </view>
         </view>
       </view>
+
+      <!-- Row 4: cell-completion progress + status -->
+      <view v-if="!isEditMode && totalCount > 0" class="progress-row">
+        <text class="progress-label"><text class="progress-current">{{ completedCount }}</text>/{{ progressTarget }}</text>
+        <view class="progress-track">
+          <view class="progress-fill" :style="{ width: progressPercent + '%' }"></view>
+        </view>
+        <text class="progress-status" :class="{ 'progress-status-done': bingoJustCompleted }">{{ bingoJustCompleted ? `已完成 ×${bingoLineCount} 🏆` : '进行中' }}</text>
+      </view>
+    </view>
+
+    <view class="grid-area">
     <view class="grid" :style="gridStyle">
       <!-- skeleton shimmer during initial load -->
       <template v-if="isLoading">
@@ -364,7 +349,6 @@ import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
 // ── state ──
 const isLoading = ref(true)
 const isEditMode = ref(false)
-const showMenu = ref(false)
 const showSizePicker = ref(false)
 const showWordPicker = ref(false)
 const manualAssignTarget = ref<number | null>(null)
@@ -446,12 +430,10 @@ const {
   pushCells,
   pushComplete,
   pushWordBank,
-  switchBoard,
   fetchBoards,
   createAndSwitchBoard,
   remoteBoardId,
   getBoardSequenceNumber,
-  resetRemoteBoard,
   reloadActiveBoard,
   renameBoard,
   removeBoard,
@@ -479,8 +461,9 @@ const {
   centerIndex,
   completedCount,
   totalCount,
+  progressTarget,
+  bingoJustCompleted,
   isAllDone,
-  resetBoard,
   loadState,
   persistState,
   checkBingo,
@@ -508,8 +491,6 @@ const {
 
 // Board switcher state
 const showBoardSwitcher = ref(false)
-const switcherBoards = ref<any[]>([])
-const switcherLoading = ref(false)
 
 const hasOverlay = computed(() =>
   showWordPicker.value
@@ -550,9 +531,7 @@ const headerStyle = computed(() => {
   }
 })
 
-const gridHeaderStyle = computed(() => ({
-  paddingRight: `${props.capsuleRightRpx - gridLayoutStyle.value.sidePad}rpx`,
-}))
+
 
 const gridStyle = computed(() => {
   const { gap, topPad, cellText, labelText, illustText, illustPad } = gridLayoutStyle.value
@@ -564,6 +543,12 @@ const gridStyle = computed(() => {
     '--illust-text-size': `${illustText}rpx`,
     '--illust-pad': `${illustPad}rpx`,
   }
+})
+
+const progressPercent = computed(() => {
+  const target = progressTarget.value
+  if (target === 0) return 100
+  return Math.min(100, Math.round((completedCount.value / target) * 100))
 })
 
 const bingoMultiplier = computed(() => {
@@ -603,48 +588,36 @@ const boardWords = computed(() => {
 })
 
 // ── menu ──
-function toggleMenu() {
-  closeBoardSwitcher()
-  showMenu.value = !showMenu.value
-}
-
+// The old settings dropdown is gone; its actions now live in the board
+// switcher dropdown. closeMenu() is kept as a thin alias so the many action
+// handlers that called it simply close the board switcher (and its size
+// picker) instead.
 function closeMenu() {
-  showMenu.value = false
-  showSizePicker.value = false
+  closeBoardSwitcher()
 }
 
 function onPageTap() {
-  if (showMenu.value) closeMenu()
+  if (showBoardSwitcher.value) closeBoardSwitcher()
 }
 
 // ── board switcher ──
-async function onOpenBoardSwitcher() {
+// The dropdown no longer lists boards (管理全部卡片 navigates to the boards
+// page instead), so opening it is just a toggle — no server fetch needed.
+function onOpenBoardSwitcher() {
   if (!loggedIn.value) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     return
   }
-  closeMenu()
-  // Toggle dropdown
   if (showBoardSwitcher.value) {
     closeBoardSwitcher()
     return
   }
   showBoardSwitcher.value = true
-  switcherLoading.value = true
-  try {
-    const all = await fetchBoards()
-    // Show only 3 most recent (already sorted by updated_at DESC from server)
-    switcherBoards.value = all.slice(0, 3)
-  } catch (err) {
-    switcherBoards.value = []
-    uni.showToast({ title: (err as Error).message || '加载失败', icon: 'none' })
-  } finally {
-    switcherLoading.value = false
-  }
 }
 
 function closeBoardSwitcher() {
   showBoardSwitcher.value = false
+  showSizePicker.value = false
 }
 
 function goToBoards() {
@@ -652,76 +625,9 @@ function goToBoards() {
   uni.navigateTo({ url: '/pages/boards/boards' })
 }
 
-async function onSwitcherSelect(board: any) {
-  if (board.isActive) {
-    closeBoardSwitcher()
-    return
-  }
-  uni.showLoading({ title: '切换中…' })
-  const result = await switchBoard(board.id)
-  uni.hideLoading()
-  closeBoardSwitcher()
-  if (result) {
-    lastMilestoneShown = 0
-    if (result.theme && result.theme !== currentThemeId.value) {
-      setTheme(result.theme)
-    }
-    currentPublishedTemplateId.value = result.publishedTemplateId || null
-    showMilestone('🔄', `已切换到「${board.title}」`)
-    // After switching board, reload illustration mode and fetch illustrations
-    illustCache.clear()
-    loadIllustMode()
-    if (isIllustMode.value) autoPopulateIllustrations()
-  } else {
-    uni.showToast({ title: '切换失败', icon: 'none' })
-  }
-}
-
 // Classify current board: 'empty' | 'words-only' | 'has-images'
 function getBoardState(): 'empty' | 'words-only' | 'has-images' {
   return boardStateOf(cells.value)
-}
-
-async function onSwitcherCreate() {
-  closeBoardSwitcher()
-
-  const hasContent = cells.value.some(c => c.imagePath || c.completed)
-
-  const existingBoards = await fetchBoards()
-  const existingTitles = existingBoards.map((b: any) => b.title)
-  const defaultName = defaultBoardTitle(existingTitles)
-
-  const title = await new Promise<string | null>(resolve => {
-    uni.showModal({
-      title: '命名 Bingo 卡',
-      editable: true,
-      placeholderText: '请输入卡片名称',
-      content: defaultName,
-      success: (res) => resolve(res.confirm ? (res.content?.trim() || defaultName) : null),
-      fail: () => resolve(null),
-    })
-  })
-  if (!title) return
-
-  const size = gridSize.value
-  uni.showLoading({ title: '创建中…' })
-
-  if (!hasContent && remoteBoardId.value) {
-    await removeBoard(remoteBoardId.value)
-  }
-
-  const result = await createAndSwitchBoard(title, size, currentThemeId.value)
-  uni.hideLoading()
-  if (result) {
-    lastMilestoneShown = 0
-    currentPublishedTemplateId.value = null
-    if (result.theme && result.theme !== currentThemeId.value) {
-      setTheme(result.theme)
-    }
-    showMilestone('📋', '已创建新Bingo卡')
-  } else {
-    uni.showToast({ title: '创建失败', icon: 'none' })
-  }
 }
 
 // ── edit mode (manual edit) ──
@@ -952,7 +858,7 @@ function closeWordPicker() {
 
 // ── cell tap ──
 async function handleCellTap(index: number) {
-  if (showMenu.value) { closeMenu(); return }
+  if (showBoardSwitcher.value) { closeBoardSwitcher(); return }
   if (isEditMode.value) {
     openWordPicker(index)
     return
@@ -1294,14 +1200,6 @@ async function onApplyShareCode() {
   showMilestone('📋', '已创建新Bingo卡')
 }
 
-function onResetBoard() {
-  closeMenu()
-  resetBoard(() => {
-    lastMilestoneShown = 0
-    resetRemoteBoard()
-  })
-}
-
 onShow(() => {
   // Clear the illustration cache so we get fresh data after illustrations are uploaded from the word bank page
   illustCache.clear()
@@ -1352,7 +1250,7 @@ const onTemplateApplied = async (data: TemplateAppliedData) => {
   }
   lastMilestoneShown = 0
 
-  // After switching templates, refresh illustrations (kept consistent with onSwitcherSelect)
+  // After switching templates, refresh illustrations (mirrors the board-switch flow)
   illustCache.clear()
   loadIllustMode()
   if (isIllustMode.value) autoPopulateIllustrations()
@@ -1546,6 +1444,14 @@ onMounted(async () => {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1rpx solid rgba(0, 0, 0, 0.06);
+  /* Lift the whole header above the grid AND above the board-switcher overlay
+     (z-index:99): the switcher dropdown lives inside the header but overflows
+     down over the grid, and that full-screen transparent overlay (used for
+     tap-outside-to-close) would otherwise paint above it and swallow taps on
+     the dropdown actions. Full-screen modals are all z-index >= 1000, so 100
+     here keeps the header below them while staying above the overlay. */
+  position: relative;
+  z-index: 100;
 }
 
 .header-top {
@@ -1590,9 +1496,75 @@ onMounted(async () => {
   opacity: 0.6;
   letter-spacing: 2rpx;
   padding-left: 0rpx;
-  margin-top: -2rpx;
-  margin-left: -8rpx;
+  margin-top: 0;
+  margin-left: 0;
   font-weight: 500;
+}
+
+/* ── header rows (subtitle + settings, board switcher + mode toggle) ── */
+.header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.header-subtitle-row {
+  margin-top: -4rpx;
+}
+
+.header-controls-row {
+  margin-top: 8rpx;
+}
+
+/* ── progress bar ── */
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 8rpx 0 0;
+}
+
+.progress-track {
+  flex: 1;
+  height: 10rpx;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 8rpx;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b4cc0 0%, #4c6ef5 100%);
+  border-radius: 8rpx;
+  transition: width 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+  min-width: 0;
+}
+
+.progress-label {
+  font-size: 22rpx;
+  color: var(--hint-color);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.progress-current {
+  font-size: 26rpx;
+  font-weight: 800;
+  color: var(--text-color);
+}
+
+.progress-status {
+  font-size: 22rpx;
+  color: var(--hint-color);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.progress-status-done {
+  color: var(--text-color);
+  font-weight: 700;
 }
 
 .board-name-row {
@@ -1645,66 +1617,6 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-/* ── dropdown menu ── */
-.menu-anchor {
-  position: relative;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 8rpx;
-  background: var(--menu-bg);
-  border-radius: 16rpx;
-  border: 3rpx solid var(--menu-border);
-  padding: 8rpx 0;
-  box-shadow: 0 16rpx 40rpx rgba(61, 44, 32, 0.22);
-  z-index: 50;
-  min-width: 280rpx;
-  animation: menu-slide-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  transform-origin: top right;
-}
-
-@keyframes menu-slide-in {
-  0% { transform: scale(0.85) translateY(-8rpx); opacity: 0; }
-  100% { transform: scale(1) translateY(0); opacity: 1; }
-}
-
-.menu-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16rpx 24rpx;
-  font-size: 26rpx;
-  color: var(--text-color);
-}
-
-.menu-item:active {
-  background: #f0e4d4;
-}
-
-.menu-item.danger {
-  color: #b14b3c;
-}
-
-.menu-item-disabled {
-  color: var(--hint-color, #999) !important;
-  opacity: 0.6;
-}
-
-
-.menu-divider {
-  height: 2rpx;
-  background: var(--border-color);
-  margin: 4rpx 16rpx;
-}
-
 .size-picker {
   display: flex;
   flex-wrap: wrap;
@@ -1740,6 +1652,7 @@ onMounted(async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  padding-top: 24rpx;
 }
 
 .grid-header {
@@ -1769,11 +1682,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8rpx;
+  gap: 12rpx;
+  flex-shrink: 0;
 }
 
 .mode-switch-label {
-  font-size: 18rpx;
+  font-size: 22rpx;
   color: var(--hint-color, #999);
   white-space: nowrap;
   line-height: 1;
@@ -2940,7 +2854,7 @@ onMounted(async () => {
   position: absolute;
   top: calc(100% + 8rpx);
   left: 0;
-  min-width: 360rpx;
+  min-width: 280rpx;
   background: var(--cell-bg, #fff);
   border-radius: 16rpx;
   box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
@@ -2952,12 +2866,6 @@ onMounted(async () => {
 @keyframes dropdown-fade {
   from { opacity: 0; transform: translateY(-8rpx); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.dropdown-loading {
-  padding: 24rpx 28rpx;
-  color: var(--hint-color, #999);
-  font-size: 24rpx;
 }
 
 .dropdown-board-item {
@@ -2975,64 +2883,39 @@ onMounted(async () => {
   background: rgba(0, 0, 0, 0.04);
 }
 
-.dropdown-board-active {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.dropdown-board-info {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-  flex: 1;
-  min-width: 0;
-}
-
-.dropdown-board-title {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: var(--text-color, #333);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dropdown-current-tag {
-  font-size: 18rpx;
-  color: #fff;
-  background: var(--accent-color, #666);
-  padding: 2rpx 12rpx;
-  border-radius: 16rpx;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.dropdown-board-meta {
-  font-size: 22rpx;
-  color: var(--hint-color, #999);
-  flex-shrink: 0;
-}
-
 .dropdown-create {
-  justify-content: center;
-  flex: 1;
+  /* left-aligned: 创建卡片 on the left, size on the right */
 }
 .dropdown-create-text {
   font-size: 24rpx;
-  font-weight: 600;
-  color: var(--accent-color, #666);
+  font-weight: 400;
+  color: var(--text-color, #333);
 }
 .dropdown-create-row {
   display: flex;
-  align-items: center;
-  gap: 0;
+  flex-direction: column;
 }
-.dropdown-manage {
-  justify-content: center;
+
+/* card action rows (管理/创建/编辑/预览/分享/发布) folded in from the old
+   settings menu — left-aligned, sharing the board-item row styling */
+.dropdown-action {
+  justify-content: flex-start;
+}
+.dropdown-action-top {
   border-top: 1rpx solid var(--border-color, #eee);
 }
-.dropdown-manage-text {
-  font-size: 22rpx;
+.dropdown-action-text {
+  font-size: 24rpx;
+  font-weight: 400;
+  color: var(--text-color, #333);
+}
+/* only 管理全部卡片 is emphasized */
+.dropdown-action-text-strong {
+  font-weight: 700;
+}
+.dropdown-action-disabled .dropdown-action-text {
   color: var(--hint-color, #999);
+  opacity: 0.6;
 }
 </style>
 <!-- trigger -->

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createCells, createDefaultCells, getBingoLines, sanitizeCells, applyTitlesToCells } from '../src/pages/index/useBingoBoard'
+import { useBingoBoard } from '../src/pages/index/useBingoBoard'
 import { DEFAULT_WORDS } from '../src/pages/index/bingoDefaults'
 import type { BingoCell, BingoState } from '../src/pages/index/useBingoBoard'
 
@@ -223,5 +224,86 @@ describe('applyTitlesToCells', () => {
     applyTitlesToCells(cells, ['新'])
     expect(cells[0].title).toBe('原') // Original array is unchanged.
     expect(cells[0].completed).toBe(true)
+  })
+})
+
+// ── progress freeze on bingo (useBingoBoard composable) ──
+
+describe('progress freeze on bingo', () => {
+  const setEmpty4x4 = (b: ReturnType<typeof useBingoBoard>) => {
+    b.gridSize.value = 4
+    b.cells.value = Array.from({ length: 16 }, (_, i) => ({ id: i, title: 'x', completed: false }))
+    b.syncLineCount() // reset line/freeze trackers to a clean mid-progress state
+  }
+
+  it('freezes the target on a fresh bingo, then resumes after the next cell', () => {
+    const b = useBingoBoard()
+    setEmpty4x4(b)
+
+    // Complete the first row (cells 0..3) → one bingo line.
+    for (const i of [0, 1, 2, 3]) b.cells.value[i].completed = true
+    b.checkBingo()
+
+    expect(b.bingoLineCount.value).toBe(1)
+    expect(b.completedCount.value).toBe(4)
+    // Frozen: status shows the achieved bingo, bar reads 4/4 (100%).
+    expect(b.bingoJustCompleted.value).toBe(true)
+    expect(b.progressTarget.value).toBe(4)
+
+    // Mark the next cell (4) — does not form a new line.
+    b.cells.value[4].completed = true
+    b.checkBingo()
+
+    // Unfrozen: bar resumes tracking the next-closest line.
+    expect(b.bingoJustCompleted.value).toBe(false)
+    expect(b.completedCount.value).toBe(5)
+    // Closest incomplete line is col0 (0,4,8,12): 2 done, 2 remaining → 5 + 2.
+    expect(b.progressTarget.value).toBe(7)
+  })
+
+  it('re-freezes when the next cell immediately forms another bingo', () => {
+    const b = useBingoBoard()
+    setEmpty4x4(b)
+
+    // First bingo: row 0.
+    for (const i of [0, 1, 2, 3]) b.cells.value[i].completed = true
+    b.checkBingo()
+    expect(b.bingoJustCompleted.value).toBe(true)
+
+    // Pre-fill col0 except the last cell, then complete it → second bingo.
+    b.cells.value[4].completed = true
+    b.cells.value[8].completed = true
+    b.checkBingo() // still 1 line, unfrozen mid-progress
+    expect(b.bingoJustCompleted.value).toBe(false)
+
+    b.cells.value[12].completed = true // completes col0 (0,4,8,12)
+    b.checkBingo()
+    expect(b.bingoLineCount.value).toBe(2)
+    expect(b.bingoJustCompleted.value).toBe(true)
+    expect(b.progressTarget.value).toBe(b.completedCount.value)
+  })
+
+  it('re-freezes when a line is broken and later re-formed (sticky-high guard bug)', () => {
+    const b = useBingoBoard()
+    setEmpty4x4(b)
+
+    // Form row 0 → freeze.
+    for (const i of [0, 1, 2, 3]) b.cells.value[i].completed = true
+    b.checkBingo()
+    expect(b.bingoJustCompleted.value).toBe(true)
+
+    // Break the line by un-completing one cell.
+    b.cells.value[3].completed = false
+    b.checkBingo()
+    expect(b.bingoLineCount.value).toBe(0)
+    expect(b.bingoJustCompleted.value).toBe(false)
+
+    // Re-complete it: the line count goes 0 → 1 again. Even though
+    // lastSeenLineCount is already 1 (sticky-high), the freeze MUST re-engage.
+    b.cells.value[3].completed = true
+    b.checkBingo()
+    expect(b.bingoLineCount.value).toBe(1)
+    expect(b.bingoJustCompleted.value).toBe(true)
+    expect(b.progressTarget.value).toBe(b.completedCount.value)
   })
 })
