@@ -180,7 +180,7 @@
 
     <!-- Photo privacy notice modal -->
     <view v-if="showPhotoNotice" class="word-editor-overlay" @tap.stop>
-      <view class="overlay-backdrop" @tap="onPhotoNoticeCancel"></view>
+      <view class="overlay-backdrop" @tap="cancelPhotoNotice"></view>
       <view class="photo-notice-panel" @tap.stop>
         <view class="photo-notice-icon">📷</view>
         <view class="photo-notice-title">照片提示</view>
@@ -194,8 +194,8 @@
           <text class="checkbox-label">不再提示</text>
         </view>
         <view class="photo-notice-actions">
-          <button class="photo-notice-btn cancel" @tap="onPhotoNoticeCancel">取消</button>
-          <button class="photo-notice-btn confirm" @tap="onPhotoNoticeConfirm">我知道了</button>
+          <button class="photo-notice-btn cancel" @tap="cancelPhotoNotice">取消</button>
+          <button class="photo-notice-btn confirm" @tap="confirmPhotoNotice">我知道了</button>
         </view>
       </view>
     </view>
@@ -341,6 +341,7 @@ import { useAuth } from './useAuth'
 import { useSync, defaultBoardTitle } from './useSync'
 import { deleteBoard, resolveApiUrl, matchIllustrations, getProfile } from './api'
 import { usePrivateImage } from './usePrivateImage'
+import { usePhotoNotice } from './usePhotoNotice'
 import { getBoardState as boardStateOf, defaultIllustModeOn } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
@@ -413,10 +414,14 @@ async function toggleIllustMode() {
   }
 }
 
-// Photo privacy notice
-const showPhotoNotice = ref(false)
-const photoNoticeDontShow = ref(false)
-let photoNoticeResolve: ((confirmed: boolean) => void) | null = null
+// Photo privacy notice (one-shot consent modal — state + logic in composable)
+const {
+  showPhotoNotice,
+  photoNoticeDontShow,
+  requirePhotoConsent,
+  confirmPhotoNotice,
+  cancelPhotoNotice,
+} = usePhotoNotice()
 
 // Publish template
 const currentPublishedTemplateId = ref<number | null>(null)
@@ -919,21 +924,17 @@ async function handleCellTap(index: number) {
   }
 }
 
-const PHOTO_NOTICE_KEY = STORAGE_KEYS.PHOTO_NOTICE_SHOWN
-
 async function pickImage(index: number) {
   if (isPickingImage.value) return
-  
-  // Show privacy notice only in cloud mode (photos are uploaded)
+
+  // Show privacy notice only in cloud mode (photos are uploaded).
+  // requirePhotoConsent() returns true immediately if already dismissed.
   const imageMode = safeGet(STORAGE_KEYS.IMAGE_MODE) || 'local'
   if (imageMode === 'cloud') {
-    const noticeDismissed = safeGet(PHOTO_NOTICE_KEY)
-    if (!noticeDismissed) {
-      const confirmed = await showPhotoPrivacyNotice()
-      if (!confirmed) return
-    }
+    const confirmed = await requirePhotoConsent()
+    if (!confirmed) return
   }
-  
+
   isPickingImage.value = true
   // Haptic feedback
   try { uni.vibrateShort({ type: 'light' }) } catch {}
@@ -974,33 +975,6 @@ async function pickImage(index: number) {
     showProgressToast()
   } finally {
     isPickingImage.value = false
-  }
-}
-
-function showPhotoPrivacyNotice(): Promise<boolean> {
-  return new Promise((resolve) => {
-    photoNoticeDontShow.value = false
-    photoNoticeResolve = resolve
-    showPhotoNotice.value = true
-  })
-}
-
-function onPhotoNoticeConfirm() {
-  if (photoNoticeDontShow.value) {
-    safeSet(PHOTO_NOTICE_KEY, true)
-  }
-  showPhotoNotice.value = false
-  if (photoNoticeResolve) {
-    photoNoticeResolve(true)
-    photoNoticeResolve = null
-  }
-}
-
-function onPhotoNoticeCancel() {
-  showPhotoNotice.value = false
-  if (photoNoticeResolve) {
-    photoNoticeResolve(false)
-    photoNoticeResolve = null
   }
 }
 
