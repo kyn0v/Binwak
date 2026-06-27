@@ -18,14 +18,58 @@ export function roundRect(ctx: any, x: number, y: number, w: number, h: number, 
   ctx.closePath()
 }
 
-/** Load an image from a path via Canvas 2D API */
+// Module-level cache: canvas Image objects keyed by src path. Memoization is
+// transparent (same image for a given src/canvas), so callers that don't need
+// caching are unaffected. Keyed by src and validated against the canvas node so
+// different canvases (e.g. bingoCanvas vs polaroidCanvas) never collide.
+const _imgObjCache = new Map<string, { img: any; canvas: any }>()
+
+/** Load an image from a path via Canvas 2D API (cached by src + canvas) */
 export function loadCanvasImage(canvas: any, src: string): Promise<any> {
+  const cached = _imgObjCache.get(src)
+  if (cached && cached.canvas === canvas) {
+    return Promise.resolve(cached.img)
+  }
   return new Promise((resolve, reject) => {
     const img = canvas.createImage()
-    img.onload = () => resolve(img)
+    img.onload = () => {
+      _imgObjCache.set(src, { img, canvas })
+      resolve(img)
+    }
     img.onerror = (e: any) => reject(e)
     img.src = src
   })
+}
+
+/**
+ * Break text into lines that fit within maxWidth. Returns an array of line
+ * strings; if the text exceeds maxLines, the last line is truncated with an
+ * ellipsis.
+ */
+export function wrapText(ctx: any, text: string, maxWidth: number, maxLines: number = 3): string[] {
+  const lines: string[] = []
+  let current = ''
+  for (const char of text) {
+    const test = current + char
+    if (ctx.measureText(test).width > maxWidth && current) {
+      lines.push(current)
+      current = char
+      if (lines.length >= maxLines) break
+    } else {
+      current = test
+    }
+  }
+  if (current && lines.length < maxLines) {
+    lines.push(current)
+  } else if (current && lines.length === maxLines) {
+    // Append ellipsis to last line
+    let last = lines[maxLines - 1]
+    while (last.length > 0 && ctx.measureText(last + '…').width > maxWidth) {
+      last = last.slice(0, -1)
+    }
+    lines[maxLines - 1] = last + '…'
+  }
+  return lines
 }
 
 /** Generate tiled noise texture for paper feel */
