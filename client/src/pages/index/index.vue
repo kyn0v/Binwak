@@ -16,7 +16,7 @@
 
       <!-- Row 3: board switcher (left) + illustration-mode toggle (right) -->
       <view class="header-row header-controls-row">
-        <view class="board-name-row" @tap.stop="onOpenBoardSwitcher">
+        <view class="board-name-row" @tap.stop="openBoardSwitcher">
           <text class="board-name">{{ boardTitle }}</text>
           <text class="board-name-arrow" :class="{ 'arrow-up': showBoardSwitcher }">▾</text>
           <view v-if="!loggedIn && offlineReason" class="offline-badge" @tap.stop="showOfflineDetail">
@@ -30,7 +30,7 @@
             </view>
             <!-- create card (replaces 新建Bingo卡; reuses the size picker) -->
             <view class="dropdown-create-row">
-              <view class="dropdown-board-item dropdown-create dropdown-action-top" @tap.stop="showSizePicker = !showSizePicker">
+              <view class="dropdown-board-item dropdown-create dropdown-action-top" @tap.stop="toggleSizePicker">
                 <text class="dropdown-create-text">创建卡片</text>
                 <text class="size-label">{{ gridSize }}×{{ gridSize }}</text>
               </view>
@@ -344,6 +344,7 @@ import { usePrivateImage } from './usePrivateImage'
 import { usePhotoNotice } from './usePhotoNotice'
 import { useIllustMode } from './useIllustMode'
 import { useWordPicker } from './useWordPicker'
+import { useBoardSwitcher } from './useBoardSwitcher'
 import { useMilestoneToast } from './useMilestoneToast'
 import { getBoardState as boardStateOf } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
@@ -353,7 +354,6 @@ import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
 // ── state ──
 const isLoading = ref(true)
 const isEditMode = ref(false)
-const showSizePicker = ref(false)
 const showSharePanel = ref(false)
 const shareCodeText = ref('')
 const importCodeText = ref('')
@@ -466,8 +466,15 @@ const {
   closeWordPicker,
 } = useWordPicker({ cells, wordBank, addWord, illustCache })
 
-// Board switcher state
-const showBoardSwitcher = ref(false)
+// Board switcher dropdown (header menu) — state + open/close/navigate
+const {
+  showBoardSwitcher,
+  showSizePicker,
+  openBoardSwitcher,
+  closeBoardSwitcher,
+  toggleSizePicker,
+  goToBoards,
+} = useBoardSwitcher({ loggedIn })
 
 const hasOverlay = computed(() =>
   showWordPicker.value
@@ -538,41 +545,14 @@ const boardWords = computed(() => {
 })
 
 // ── menu ──
-// The old settings dropdown is gone; its actions now live in the board
-// switcher dropdown. closeMenu() is kept as a thin alias so the many action
-// handlers that called it simply close the board switcher (and its size
-// picker) instead.
+// The board-switcher dropdown is the only menu. closeMenu() is a thin alias so
+// the many action handlers that dismiss the dropdown read clearly.
 function closeMenu() {
   closeBoardSwitcher()
 }
 
 function onPageTap() {
   if (showBoardSwitcher.value) closeBoardSwitcher()
-}
-
-// ── board switcher ──
-// The dropdown no longer lists boards (管理全部卡片 navigates to the boards
-// page instead), so opening it is just a toggle — no server fetch needed.
-function onOpenBoardSwitcher() {
-  if (!loggedIn.value) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    return
-  }
-  if (showBoardSwitcher.value) {
-    closeBoardSwitcher()
-    return
-  }
-  showBoardSwitcher.value = true
-}
-
-function closeBoardSwitcher() {
-  showBoardSwitcher.value = false
-  showSizePicker.value = false
-}
-
-function goToBoards() {
-  closeBoardSwitcher()
-  uni.navigateTo({ url: '/pages/boards/boards' })
 }
 
 // Classify current board: 'empty' | 'words-only' | 'has-images'
