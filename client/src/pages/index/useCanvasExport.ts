@@ -4,6 +4,7 @@
  */
 import { type Ref, nextTick, ref } from 'vue'
 import type { CardStyleDefinition, CardRenderOptions } from './cardStyles/types'
+import { roundRect, loadCanvasImage, wrapText } from './cardStyles/helpers'
 import { EXPORT_CANVAS_SIZE } from '@/config/limits'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet } from '@/utils/safeStorage'
@@ -48,25 +49,6 @@ function getCanvas2D(id: string, width: number, height?: number): Promise<{ canv
         const ctx = canvas.getContext('2d')
         resolve({ canvas, ctx })
       })
-  })
-}
-
-// Module-level cache: canvas Image objects keyed by src path
-const _imgObjCache = new Map<string, { img: any; canvas: any }>()
-
-function loadCanvasImage(canvas: any, src: string): Promise<any> {
-  const cached = _imgObjCache.get(src)
-  if (cached && cached.canvas === canvas) {
-    return Promise.resolve(cached.img)
-  }
-  return new Promise((resolve, reject) => {
-    const img = canvas.createImage()
-    img.onload = () => {
-      _imgObjCache.set(src, { img, canvas })
-      resolve(img)
-    }
-    img.onerror = (e: any) => reject(e)
-    img.src = src
   })
 }
 
@@ -120,47 +102,6 @@ export function preWarmLocalPaths(urls: string[]) {
   _preWarmPromise = chain
     .then(() => { _preWarmPromise = null })
     .catch(() => { _preWarmPromise = null })
-}
-
-/** Break text into lines that fit within maxWidth. Returns array of line strings. */
-function wrapText(ctx: any, text: string, maxWidth: number, maxLines: number = 3): string[] {
-  const lines: string[] = []
-  let current = ''
-  for (const char of text) {
-    const test = current + char
-    if (ctx.measureText(test).width > maxWidth && current) {
-      lines.push(current)
-      current = char
-      if (lines.length >= maxLines) break
-    } else {
-      current = test
-    }
-  }
-  if (current && lines.length < maxLines) {
-    lines.push(current)
-  } else if (current && lines.length === maxLines) {
-    // Append ellipsis to last line
-    let last = lines[maxLines - 1]
-    while (last.length > 0 && ctx.measureText(last + '…').width > maxWidth) {
-      last = last.slice(0, -1)
-    }
-    lines[maxLines - 1] = last + '…'
-  }
-  return lines
-}
-
-function roundRect(ctx: any, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
-  ctx.arcTo(x + w, y, x + w, y + r, r)
-  ctx.lineTo(x + w, y + h - r)
-  ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
-  ctx.lineTo(x + r, y + h)
-  ctx.arcTo(x, y + h, x, y + h - r, r)
-  ctx.lineTo(x, y + r)
-  ctx.arcTo(x, y, x + r, y, r)
-  ctx.closePath()
 }
 
 // ── main export ──
