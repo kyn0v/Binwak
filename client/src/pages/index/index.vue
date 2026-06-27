@@ -1168,7 +1168,7 @@ onMounted(async () => {
 })
 </script>
 
-<style>
+<style scoped>
 .page {
   padding: 20rpx 32rpx 0; /* overridden by inline style for side padding */
   background: var(--page-bg);
