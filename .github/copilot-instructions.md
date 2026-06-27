@@ -33,8 +33,12 @@
 ## E2E 测试（已落地，uni-automator）
 
 - 已搭好基于 `@dcloudio/uni-automator` 的 E2E 骨架，详见 `client/tests/e2e/README.md`。
-- 运行 mp-weixin：先 `npm run build:mp-weixin`，再 `npm run test:e2e:mp`；
-  需开发者工具**开启服务端口**且已登录。
+- 运行 mp-weixin：直接 `npm run test:e2e:mp`（**无需先 build**）；需开发者工具**开启服务端口**且
+  已登录。本套件**仅本地手动跑**，CI 不含。
+- 配置必须保持 `compile: true`：automator 自己跑 `dev:mp-weixin` 编译并注入运行时 hook
+  `wx.$$initRuntimeAutomator`。普通 `uni build` 不注入该 hook，用 `compile: false` + 预构建会
+  报 `wx.$$initRuntimeAutomator not exists`。若再遇此错：确认 `compile: true`，并清掉 DevTools
+  编译缓存 `WeappCache/WeappCompileCache/*`；首次自动化弹「信任项目」3 秒框可用 `--trust-project` 跳过。
 - 运行 h5：构建后起静态服务，再 `npm run test:e2e:h5`。
 - 用例放 `client/tests/e2e/*.e2e.ts`（与 Vitest 单元测试 `*.test.ts` 天然隔离）。
 - 进主页用 `gotoMain()`，切 tab 用 `switchTab(page, idx)`（真实点击 `.tab-item`）。

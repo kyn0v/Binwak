@@ -22,8 +22,14 @@ module.exports = {
   globalTeardown: '@dcloudio/uni-automator/dist/teardown.js',
   testEnvironment: '@dcloudio/uni-automator/dist/environment.js',
   testEnvironmentOptions: {
-    // We build the bundle ourselves in the npm script, so don't auto-compile.
-    compile: false,
+    // Let the automator compile the project itself (it runs `dev:mp-weixin`
+    // under the hood). This is REQUIRED, not optional: with `compile: false`
+    // the runner opens a pre-built bundle, but a plain `uni build -p mp-weixin`
+    // does NOT inject the automator runtime hook (`wx.$$initRuntimeAutomator`),
+    // so every run dies with "wx.$$initRuntimeAutomator not exists". Compiling
+    // through the automator injects that hook and wires it to wx correctly.
+    // Bonus: no manual `npm run build:mp-weixin` step is needed before e2e.
+    compile: true,
     'mp-weixin': {
       port: 9420,
       launch: true, // let the runner boot DevTools
