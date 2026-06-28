@@ -67,7 +67,7 @@ export async function gotoMain(): Promise<any> {
   await program.evaluate((key: string) => {
     try { wx.setStorageSync(key, 'true') } catch (e) {}
   }, ONBOARDED_KEY)
-  await program.reLaunch('/pages/main/main')
+  await program.reLaunch('/pages/index/index')
   // mp-weixin needs a generous settle window after reLaunch.
   const page = await program.currentPage()
   await page.waitFor(4000)
