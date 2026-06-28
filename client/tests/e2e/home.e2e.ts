@@ -21,7 +21,7 @@ describe('main tab shell (smoke)', () => {
 
   it('lands on the main page (not redirected to welcome)', async () => {
     const current = await program.currentPage()
-    expect(current.path).toContain('pages/main/main')
+    expect(current.path).toContain('pages/index/index')
   })
 
   it('renders the bottom tab bar with three tabs', async () => {
@@ -46,6 +46,6 @@ describe('main tab shell (smoke)', () => {
     await switchTab(page, 2)
     // profile has no template-publishing entry while the feature is gated off
     const current = await program.currentPage()
-    expect(current.path).toContain('pages/main/main')
+    expect(current.path).toContain('pages/index/index')
   })
 })
