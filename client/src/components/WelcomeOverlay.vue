@@ -60,25 +60,15 @@
     <view v-if="showNaming" class="name-mask" @tap.stop>
       <view class="name-card">
         <text class="name-title">给自己取个名字</text>
-        <text class="name-sub">这个名字会展示在广场和分享里，之后也能在「我的」里修改</text>
+        <text class="name-sub">之后也能在「我的」里修改</text>
 
         <input
           v-model="nameInput"
-          type="nickname"
           class="name-input"
           :maxlength="20"
-          placeholder="输入名字，或点击下方选项"
+          placeholder="输入名字"
           confirm-type="done"
         />
-
-        <view class="name-options">
-          <view class="name-chip" @tap="useDefaultName">
-            <text class="name-chip-text">默认 Binwak 名</text>
-          </view>
-          <view class="name-chip name-chip-hint">
-            <text class="name-chip-text">点输入框可一键带出微信昵称</text>
-          </view>
-        </view>
 
         <view class="name-actions">
           <view class="name-btn name-btn-ghost" @tap="skipName">
@@ -119,10 +109,9 @@ const savingName = ref(false)
 async function tryLogin() {
   try {
     const res = await login()
-    // Brand-new users get a one-time naming step before entering the app.
-    // 微信号 cannot be obtained by mini-programs and 微信昵称 cannot be fetched
-    // silently, so we offer the server default plus the WeChat-nickname input
-    // affordance (type="nickname") rather than a pre-filled dropdown.
+    // Brand-new users get a one-time naming step before entering the app. The
+    // input is prefilled with the server-assigned default name, which the user
+    // can keep or overwrite with their own.
     if (res.isNewUser) {
       defaultName.value = res.nickname || ''
       nameInput.value = res.nickname || ''
@@ -137,10 +126,6 @@ async function tryLogin() {
 
 function finishOnboarding() {
   emit('done')
-}
-
-function useDefaultName() {
-  nameInput.value = defaultName.value
 }
 
 function skipName() {
@@ -457,38 +442,6 @@ async function onStart() {
   border-radius: 16rpx;
   font-size: 30rpx;
   color: #1a1a1a;
-}
-
-.name-options {
-  margin-top: 24rpx;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.name-chip {
-  padding: 14rpx 24rpx;
-  background: #fdf6f0;
-  border: 2rpx solid #f0d9c8;
-  border-radius: 32rpx;
-}
-
-.name-chip:active {
-  transform: scale(0.96);
-}
-
-.name-chip-hint {
-  background: transparent;
-  border-color: transparent;
-}
-
-.name-chip-text {
-  font-size: 24rpx;
-  color: #d4845f;
-}
-
-.name-chip-hint .name-chip-text {
-  color: #bbb;
 }
 
 .name-actions {
