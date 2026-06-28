@@ -41,3 +41,13 @@ updates:
       - dependency-name: vitest
         update-types:
           - version-update:semver-major
+    # 安全补丁自动合并配置
+    auto-merge:
+      # 自动创建 PR
+      allow-conditions:
+        - dependency-type: "indirect"
+          update-type: "patch"
+        - dependency-type: "direct"
+          update-type: "patch"
+          # 仅自动合并安全修复
+          commit-message-prefix: "fix(security)"
