@@ -59,14 +59,14 @@
     <!-- First-registration username picker -->
     <view v-if="showNaming" class="name-mask" @tap.stop>
       <view class="name-card">
-        <text class="name-title">给自己取个名字</text>
-        <text class="name-sub">之后也能在「我的」里修改</text>
+        <text class="name-title">设置昵称</text>
+        <text class="name-sub">可在「我的」页面随时修改</text>
 
         <input
           v-model="nameInput"
           class="name-input"
           :maxlength="20"
-          placeholder="输入名字"
+          placeholder="请输入昵称"
           confirm-type="done"
         />
 
@@ -137,7 +137,7 @@ async function confirmName() {
   if (savingName.value) return
   const trimmed = nameInput.value.trim().slice(0, 20)
   if (!trimmed) {
-    uni.showToast({ title: '名字不能为空', icon: 'none' })
+    uni.showToast({ title: '昵称不能为空', icon: 'none' })
     return
   }
   // Unchanged from the server-assigned default — no need to call the API.
@@ -152,7 +152,7 @@ async function confirmName() {
     safeSet(STORAGE_KEYS.NICKNAME, profile.nickname || trimmed)
     finishOnboarding()
   } catch (err) {
-    uni.showToast({ title: (err as Error).message || '保存失败，请换一个名字', icon: 'none' })
+    uni.showToast({ title: (err as Error).message || '保存失败，请更换昵称', icon: 'none' })
   } finally {
     savingName.value = false
   }
