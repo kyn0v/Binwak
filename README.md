@@ -40,6 +40,9 @@ npm run dev
 # 生产环境由后端在 /admin 路径静态托管
 ```
 
+> 💡 **每次都用干净数据库测试**：后端用 `npm run dev:fresh` 启动即可。它把整个 SQLite 库放在内存里（`DB_PATH=:memory:`），**进程一启动就是空库、重启即清空、磁盘不写任何文件**，无需手动删 `server/data/bingo.db` 或写重置脚本。适合验证「新用户首启引导」这类依赖全新状态的流程。管理后台账号走环境变量（`ADMIN_USERNAME` / `ADMIN_PASSWORD`），不在数据库里，空库也能正常登录。需要数据跨重启保留时仍用 `npm run dev`（持久库 `server/data/bingo.db`）。
+> 注意：`dev:fresh` 用 `tsx watch`，改动后端源码触发热重载时内存库会一并清空。
+
 ### 测试
 
 ```bash
@@ -133,6 +136,9 @@ cd admin && npm install
 npm run dev
 # In production it's served by the backend at /admin
 ```
+
+> 💡 **Test against a clean database every time**: start the backend with `npm run dev:fresh`. It keeps the whole SQLite database in memory (`DB_PATH=:memory:`), so it's **empty on every start, wiped on restart, and writes nothing to disk** — no need to delete `server/data/bingo.db` or run a reset script. Ideal for exercising flows that depend on a brand-new state, like the first-launch onboarding. The admin console uses env-var credentials (`ADMIN_USERNAME` / `ADMIN_PASSWORD`), not the database, so it still logs in against an empty DB. Use `npm run dev` when you want data to persist across restarts (durable `server/data/bingo.db`).
+> Note: `dev:fresh` runs under `tsx watch`, so editing backend source triggers a reload that also clears the in-memory database.
 
 ### Tests
 

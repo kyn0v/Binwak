@@ -10,7 +10,7 @@
     <canvas type="2d" id="cropCanvas" class="offscreen-canvas"></canvas>
     <canvas type="2d" id="polaroidCanvas" class="offscreen-canvas"></canvas>
     <!-- Persistent TabBar — fixed to bottom, never affected by page scroll -->
-    <view class="custom-tabbar" :style="{ paddingBottom: safeAreaBottom + 'px' }">
+    <view v-if="onboarded" class="custom-tabbar" :style="{ paddingBottom: safeAreaBottom + 'px' }">
       <view class="tabbar-inner">
         <view
           v-for="item in tabs"
@@ -29,6 +29,10 @@
         </view>
       </view>
     </view>
+    <!-- First-launch onboarding overlay. Rendered in-page (not a separate route)
+         so main stays the single home page in the nav stack and WeChat never
+         shows the 返回首页 capsule. -->
+    <WelcomeOverlay v-if="showOnboarding" @done="onOnboarded" />
   </view>
 </template>
 
@@ -36,24 +40,29 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { STORAGE_KEYS } from '@/config/storageKeys'
-import { safeGet } from '@/utils/safeStorage'
+import { safeGet, safeSet } from '@/utils/safeStorage'
 import { capsuleRightRpx as calcCapsuleRightRpx, tabbarHeight as calcTabbarHeight, tabWidths } from '@/utils/layout'
 
 import IndexTab from '../index/index.vue'
 import PlazaTab from '../plaza/plaza.vue'
 import ProfileTab from '../profile/profile.vue'
+import WelcomeOverlay from '@/components/WelcomeOverlay.vue'
 
 const currentTab = ref('index')
 const profileMounted = ref(false)
 // Gate tab-content mounting until onboarding is confirmed. On a brand-new user
-// main is the entry page and immediately redirects to the welcome/onboarding
-// flow; without this gate IndexTab would mount during that redirect and kick off
-// a login + initial-sync cycle that gets torn down mid-flight, leaving
-// remoteBoardId unset (uploads silently no-op) and the homepage half-rendered.
+// the WelcomeOverlay covers the page; without this gate IndexTab would mount
+// behind the overlay and kick off a login + initial-sync cycle that races the
+// onboarding login, leaving remoteBoardId unset (uploads silently no-op) and
+// the homepage half-rendered once the overlay closes.
 const pageReady = ref(false)
 // Tracks whether onboarding is confirmed. Set in onLoad (which fires before
 // onMounted) and read in onMounted to decide whether to reveal the tab content.
 const onboarded = ref(false)
+// Drives the in-page onboarding overlay. Kept separate from `onboarded` so the
+// overlay only mounts once layout has been measured (avoids a flash before the
+// first paint settles), and is cleared the instant onboarding completes.
+const showOnboarding = ref(false)
 const safeAreaBottom = ref(0)
 const capsuleTop = ref(0)
 const capsuleRightRpx = ref(24)
@@ -98,19 +107,17 @@ uni.$on('switch-tab', onSwitchTab)
 onUnmounted(() => { uni.$off('switch-tab', onSwitchTab) })
 
 onLoad(() => {
-  if (!safeGet(STORAGE_KEYS.ONBOARDED)) {
-    // Use reLaunch (not redirectTo) for this entry-gate jump. main is the
-    // launch/home page, so redirectTo would replace the home page and leave
-    // welcome as a non-home single-stack page — WeChat then shows a 返回首页
-    // capsule, and calling redirectTo synchronously in the launch page's onLoad
-    // can be silently dropped before the nav stack is ready (user stranded on
-    // main). reLaunch clears the whole stack and makes welcome the sole page:
-    // no 返回首页 button, reliable on cold launch.
-    uni.reLaunch({ url: '/pages/welcome/welcome' })
-    return
-  }
-  onboarded.value = true
+  // No redirect: brand-new users are onboarded via the in-page WelcomeOverlay
+  // so main remains the single home page in the nav stack (no 返回首页 capsule).
+  onboarded.value = !!safeGet(STORAGE_KEYS.ONBOARDED)
 })
+
+function onOnboarded() {
+  safeSet(STORAGE_KEYS.ONBOARDED, 'true')
+  showOnboarding.value = false
+  onboarded.value = true
+  pageReady.value = true
+}
 
 onMounted(() => {
   try {
@@ -137,9 +144,14 @@ onMounted(() => {
     activeWidth.value = 135
   }
   // Reveal tab content only after layout values are measured, so the header
-  // offset and tabbar item widths are correct on the very first render. Guard on
-  // onboarding so a brand-new user redirecting to welcome never mounts IndexTab.
-  if (onboarded.value) pageReady.value = true
+  // offset and tabbar item widths are correct on the very first render. For a
+  // brand-new user, keep the tabs gated and show the onboarding overlay instead;
+  // onOnboarded() reveals the tabs once the overlay completes.
+  if (onboarded.value) {
+    pageReady.value = true
+  } else {
+    showOnboarding.value = true
+  }
 })
 </script>
 
