@@ -59,8 +59,8 @@ export async function seedFixtures(): Promise<void> {
 /**
  * Mark onboarding complete and land on the main (tab shell) page.
  *
- * The main page redirects brand-new users to the welcome flow, so seed the
- * onboarding flag first, then reLaunch and wait for the shell to settle.
+ * The main page shows a brand-new user the in-page onboarding overlay, so seed
+ * the onboarding flag first, then reLaunch and wait for the shell to settle.
  * Returns the current page instance.
  */
 export async function gotoMain(): Promise<any> {

@@ -11,10 +11,13 @@ export const SYSTEM_ADMIN_DISPLAY_NAME = 'Binwak'
 
 export function getDb(): Database.Database {
   if (!db) {
-    // Ensure data/ directory exists
-    const dataDir = path.dirname(config.dbPath)
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true })
+    // Ensure data/ directory exists (skipped for the special :memory: path,
+    // which keeps the whole database in RAM and writes nothing to disk).
+    if (config.dbPath !== ':memory:') {
+      const dataDir = path.dirname(config.dbPath)
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true })
+      }
     }
 
     db = new Database(config.dbPath)

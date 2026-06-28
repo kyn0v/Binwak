@@ -58,6 +58,8 @@ export const config = {
 
   uploadDir: path.resolve(serverRoot, 'uploads'),
 
-  // Database file
-  dbPath: path.resolve(serverRoot, 'data/bingo.db'),
+  // Database file. Honours DB_PATH so local testing can point at a throwaway
+  // location — set DB_PATH=:memory: to get a fresh, empty database on every
+  // server start (nothing is written to disk, nothing to clean up).
+  dbPath: process.env.DB_PATH || path.resolve(serverRoot, 'data/bingo.db'),
 }

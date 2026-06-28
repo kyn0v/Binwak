@@ -10,14 +10,6 @@
 			}
 		},
 		{
-			"path": "pages/welcome/welcome",
-			"style": {
-				"navigationStyle": "custom",
-				"navigationBarTextStyle": "black",
-				"disableScroll": true
-			}
-		},
-		{
 			"path": "pages/boards/boards",
 			"style": {
 				"navigationStyle": "custom",

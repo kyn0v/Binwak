@@ -1,5 +1,5 @@
 <template>
-  <view class="welcome" @touchstart="onTouchStart" @touchend="onTouchEnd">
+  <view class="welcome-overlay" @touchstart="onTouchStart" @touchend="onTouchEnd">
     <!-- Progress indicator -->
     <view class="dots">
       <view v-for="i in 3" :key="i" class="dot" :class="{ active: step === i - 1 }"></view>
@@ -95,10 +95,16 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeSet } from '@/utils/safeStorage'
 import { login, updateNickname } from '@/pages/index/api'
+
+// Emitted once onboarding completes; the host page reveals the app shell and
+// persists the ONBOARDED flag. This overlay never navigates, so the host page
+// stays the single home page in the nav stack — WeChat therefore never shows
+// the 返回首页 capsule (the bug this overlay replaces the standalone welcome
+// page to fix).
+const emit = defineEmits<{ (e: 'done'): void }>()
 
 const step = ref(0)
 const animating = ref(true)
@@ -110,18 +116,8 @@ const nameInput = ref('')
 const defaultName = ref('')
 const savingName = ref(false)
 
-// Welcome page is a passive entry point - no auto-login
-// Users must explicitly click "开始探索" to proceed
-
 async function tryLogin() {
   try {
-    // Log in for BOTH new and existing users, then enter the app via the same
-    // clean reLaunch path. Previously only existing users (!isNewUser) were
-    // navigated to main, so a brand-new user was left stranded on welcome with
-    // ONBOARDED already set. A later incidental relaunch then dropped them onto
-    // a half-initialised main reached through a non-clean route, where the
-    // position:fixed custom tabbar fails to paint on the first iOS WeChat frame
-    // (homepage visible but no tabbar, with the 返回首页 button showing).
     const res = await login()
     // Brand-new users get a one-time naming step before entering the app.
     // 微信号 cannot be obtained by mini-programs and 微信昵称 cannot be fetched
@@ -133,14 +129,14 @@ async function tryLogin() {
       showNaming.value = true
       return
     }
-    enterApp()
+    finishOnboarding()
   } catch {
-    // Login failed (offline, etc.) — stay on welcome so the user can retry.
+    // Login failed (offline, etc.) — stay on the overlay so the user can retry.
   }
 }
 
-function enterApp() {
-  uni.reLaunch({ url: '/pages/main/main' })
+function finishOnboarding() {
+  emit('done')
 }
 
 function useDefaultName() {
@@ -149,7 +145,7 @@ function useDefaultName() {
 
 function skipName() {
   if (defaultName.value) safeSet(STORAGE_KEYS.NICKNAME, defaultName.value)
-  enterApp()
+  finishOnboarding()
 }
 
 async function confirmName() {
@@ -162,14 +158,14 @@ async function confirmName() {
   // Unchanged from the server-assigned default — no need to call the API.
   if (trimmed === defaultName.value) {
     safeSet(STORAGE_KEYS.NICKNAME, trimmed)
-    enterApp()
+    finishOnboarding()
     return
   }
   savingName.value = true
   try {
     const profile = await updateNickname(trimmed)
     safeSet(STORAGE_KEYS.NICKNAME, profile.nickname || trimmed)
-    enterApp()
+    finishOnboarding()
   } catch (err) {
     uni.showToast({ title: (err as Error).message || '保存失败，请换一个名字', icon: 'none' })
   } finally {
@@ -199,23 +195,25 @@ function goTo(idx: number) {
 }
 
 async function onStart() {
-  safeSet(STORAGE_KEYS.ONBOARDED, 'true')
   await tryLogin()
-  // If tryLogin fails, user stays on welcome page
-  // If tryLogin succeeds and user is new, main page will handle onboarding
+  // If tryLogin fails the overlay stays put so the user can retry.
 }
 </script>
 
 <style scoped>
-.welcome {
-  height: 100vh;
+.welcome-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
   background: linear-gradient(180deg, #fdfcfb 0%, #f5f0eb 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60rpx 48rpx;
-  position: relative;
   overflow: hidden;
   box-sizing: border-box;
   touch-action: pan-x;
