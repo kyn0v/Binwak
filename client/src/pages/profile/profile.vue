@@ -76,9 +76,12 @@
       <view class="about-card" @tap.stop>
         <view class="about-close" @tap="showAboutModal = false">✕</view>
         <view class="about-body">
-          <view class="about-icon">🎯</view>
+          <image class="about-logo" src="/static/logo.png" mode="aspectFit" />
           <text class="about-name">Binwak</text>
-          <text class="about-version">v1.0.0</text>
+          <view class="about-dev-row" @tap="onDeveloperTap">
+            <text class="about-dev">关于</text>
+            <text class="about-dev-link">开发者</text>
+          </view>
           <text class="about-quote" user-select>「好奇心和直觉是我们的向导」</text>
           <text class="about-source" user-select> --《总有好书店》</text>
           <view class="about-divider"></view>
@@ -87,7 +90,6 @@
             <text class="about-credit-link">NiceTry</text>
             <text class="about-credit"> 💡</text>
           </view>
-          <text class="about-credit-hint">点击复制播客链接</text>
         </view>
       </view>
     </view>
@@ -167,6 +169,15 @@ const showAboutModal = ref(false)
 
 function showAbout() {
   showAboutModal.value = true
+}
+
+function onDeveloperTap() {
+  uni.setClipboardData({
+    data: 'https://kyn0v.github.io/',
+    success: () => {
+      uni.showToast({ title: '博客链接已复制', icon: 'none' })
+    },
+  })
 }
 
 function onCreditTap() {
@@ -432,8 +443,9 @@ onMounted(() => {
   padding: 56rpx 40rpx 44rpx;
 }
 
-.about-icon {
-  font-size: 72rpx;
+.about-logo {
+  width: 96rpx;
+  height: 96rpx;
   margin-bottom: 16rpx;
 }
 
@@ -444,10 +456,22 @@ onMounted(() => {
   letter-spacing: 1rpx;
 }
 
-.about-version {
+.about-dev-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6rpx;
+}
+
+.about-dev {
   font-size: 22rpx;
   color: #bbb;
-  margin-top: 6rpx;
+}
+
+.about-dev-link {
+  font-size: 22rpx;
+  color: #576b95;
+  text-decoration: underline;
 }
 
 .about-quote {
@@ -487,12 +511,6 @@ onMounted(() => {
   font-size: 26rpx;
   color: #576b95;
   text-decoration: underline;
-}
-
-.about-credit-hint {
-  font-size: 20rpx;
-  color: #ccc;
-  margin-top: 8rpx;
 }
 
 /* Modal overlay */
