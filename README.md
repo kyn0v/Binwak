@@ -28,7 +28,7 @@
 
 ### 开发文档
 
-想跑起来或参与开发？仓库地图、技术栈、目录结构、命令与本地开发流程都在 **[AGENTS.md](AGENTS.md)** 里。
+想跑起来或参与开发？仓库地图、技术栈、目录结构、命令与本地开发流程都在 **[AGENTS.md](AGENTS.md)** 里。贡献流程（建 issue、起 PR、合并）见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
 
 ### License
 
@@ -60,7 +60,7 @@ I wanted to try NiceTry Bingo one day, but couldn't find a usable original image
 
 ### Developer docs
 
-Want to run it or contribute? The repo map, tech stack, directory layout, commands, and local dev workflow all live in **[AGENTS.md](AGENTS.md)**.
+Want to run it or contribute? The repo map, tech stack, directory layout, commands, and local dev workflow all live in **[AGENTS.md](AGENTS.md)**. For the contribution flow (open an issue, raise a PR, merge), see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ### License
 

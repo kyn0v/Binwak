@@ -69,6 +69,10 @@ npm --prefix client run test:e2e:mp   # 小程序 E2E（仅本地手动，需开
 > 本地开发、`dev:fresh` 干净库、可视化 QA、重置到全新首启的完整步骤见
 > **[local-dev skill](.github/skills/local-dev/SKILL.md)**。
 
+## 贡献流程
+
+克隆、建 issue、开分支、起 PR、申请合并的完整步骤见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
+
 ## CI/CD
 
 | Workflow | 触发条件 | 动作 |
