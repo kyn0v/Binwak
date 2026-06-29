@@ -10,7 +10,7 @@
 
 ### 创作背景
 
-某天想尝试 NiceTry Bingo，却发现很难找到能用的原图。去[豆瓣](https://www.douban.com/group/topic/292968041/)一看，发现不少小伙伴也在到处求原图。后来虽然找到了[原始网站](https://bingo.moonwillknow.dev)，但要打印出来玩还是不太方便。于是干脆 vibe code 做了这个小程序：直接在手机上配置网格、拍照打卡、生成卡片，省去找图和打印的麻烦。
+某天想尝试 NiceTry Bingo，却发现很难找到能用的原图。去[豆瓣](https://www.douban.com/group/topic/292968041/)一看，发现不少小伙伴也在到处求原图。后来虽然找到了[原始网站](https://bingo.moonwillknow.dev)，但要打印出来还是不太方便，于是尝试 vibe coding 开发了 Binwak 小程序。（ps：之所以叫 Binwak，是因为 Citywalk Bingo 这个名字小程序审核不通过 lol）
 
 ### 功能一览
 
@@ -42,7 +42,7 @@ MIT
 
 ### Why this exists
 
-I wanted to try NiceTry Bingo one day, but couldn't find a usable original image. Over on [Douban](https://www.douban.com/group/topic/292968041/), plenty of others were hunting for the same thing. I eventually found the [original site](https://bingo.moonwillknow.dev), but printing it out to play was still a hassle. So I vibe-coded this Mini Program: configure the grid, check in with photos, and generate a card — right on your phone, no image-hunting or printing required.
+I wanted to try NiceTry Bingo one day, but couldn't find a usable original image. Over on [Douban](https://www.douban.com/group/topic/292968041/), plenty of others were hunting for the same thing. I eventually found the [original site](https://bingo.moonwillknow.dev), but printing it out was still a hassle — so I vibe-coded the Binwak Mini Program. (ps: it's called Binwak because "Citywalk Bingo" failed the Mini Program name review lol)
 
 ### Features
 
