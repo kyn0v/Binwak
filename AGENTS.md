@@ -1,0 +1,84 @@
+# AGENTS.md
+
+面向 AI agent 与开发者的仓库地图。**README 只讲项目是什么与创作背景；具体怎么开发、怎么跑、代码在哪，看这里。**
+
+## 这是什么
+
+微信小程序版"城市漫步 Bingo 打卡"。本地优先（local-first）架构：
+**uni-app (Vue 3)** 前端 + **Express / SQLite** 后端 + **Vue 3** 管理后台。
+
+## 技术栈
+
+| 层 | 技术 |
+|----|------|
+| 客户端 | uni-app, Vue 3, TypeScript, Vite, Vitest, uni-automator (E2E) |
+| 服务端 | Express, SQLite, TypeScript, tsx, Vitest |
+| 管理后台 | Vue 3, Vite, TypeScript |
+| 部署 | PM2, Nginx, rsync, GitHub Actions |
+
+环境要求：Node.js 20+；微信开发者工具（预览 `mp-weixin` 构建产物）。
+
+## 目录结构
+
+```
+.
+├── client/          # uni-app 小程序前端
+│   ├── src/         # components / pages / config / utils / static
+│   └── tests/       # Vitest 单元测试 + e2e/（uni-automator）
+├── server/          # Express + SQLite 后端
+│   └── src/         # app.ts / routes / services / db / middleware / utils
+├── admin/           # Vue 3 管理后台（生产由后端在 /admin 静态托管）
+│   └── src/         # views / components / api.ts / router.ts
+├── shared/          # 前后端共享类型（types.ts）
+├── deploy/          # PM2 / Nginx 配置、release.sh、setup.sh
+├── scripts/         # dev-local.sh、reset-local.sh、deploy-server.sh
+└── .github/         # CI workflows、copilot-instructions、skills、agents
+```
+
+## 架构要点：本地优先双状态
+
+状态存在 **两处**，且会互相回灌：
+
+- 服务端数据库 `server/data/bingo.db`
+- 客户端缓存（微信小程序 Storage：打卡、token、词库）
+
+**只清一边，另一边下次启动会把数据推回去。** 想回到"全新第一次启动"必须按顺序两边都清——见
+[local-dev skill](.github/skills/local-dev/SKILL.md)。
+
+## 常用命令
+
+根 `package.json` 提供聚合脚本：
+
+| 命令 | 作用 |
+|------|------|
+| `npm run install:all` | 安装 client / server / admin 全部依赖 |
+| `npm run server:dev` | 起后端（持久库 `server/data/bingo.db`） |
+| `npm run client:dev` | 构建小程序到 `client/dist/dev/mp-weixin` |
+| `npm run admin:dev` | 起管理后台 dev server |
+| `npm run dev:local` | 一条命令：起后端 + 客户端 watch 构建 + 打开微信开发者工具 |
+| `npm run reset:local` | 重置本地服务端数据库 |
+
+测试：
+
+```bash
+npm --prefix server run test   # 后端单元测试
+npm --prefix client run test   # 前端单元测试
+npm --prefix client run test:e2e:mp   # 小程序 E2E（仅本地手动，需开发者工具）
+```
+
+> 本地开发、`dev:fresh` 干净库、可视化 QA、重置到全新首启的完整步骤见
+> **[local-dev skill](.github/skills/local-dev/SKILL.md)**。
+
+## CI/CD
+
+| Workflow | 触发条件 | 动作 |
+|----------|----------|------|
+| Server | push main (`server/`, `shared/`, `admin/`, `deploy/`) | 测试 → 构建 → rsync 至远端 → PM2 重启 |
+| Client | push main (`client/`, `shared/`) | 测试 → 构建 → 上传至微信 |
+
+## Agent 须知
+
+- **行为铁律 / 命令护栏**：见 [.github/copilot-instructions.md](.github/copilot-instructions.md)（自动加载）。
+- **可调用技能**：
+  - [local-dev](.github/skills/local-dev/SKILL.md) — 本地开发、干净库、可视化 QA、重置首启
+  - `/thermos`、`/thermo-nuclear-review`、`/thermo-nuclear-code-quality-review` — 代码审查（见 `.github/skills/`）
