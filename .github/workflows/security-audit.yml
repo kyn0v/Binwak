@@ -33,11 +33,12 @@ jobs:
         id: audit
         run: |
           set +e
-          cd ${{ matrix.directory }}
+          cd "${{ matrix.directory }}"
           AUDIT_JSON=$(npm audit --json 2>/dev/null || echo '{}')
-          echo "audit_result<<EOF" >> $GITHUB_OUTPUT
-          echo "$AUDIT_JSON" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          DELIMITER="EOF_$(openssl rand -hex 8)"
+          echo "audit_result<<$DELIMITER" >> "$GITHUB_OUTPUT"
+          echo "$AUDIT_JSON" >> "$GITHUB_OUTPUT"
+          echo "$DELIMITER" >> "$GITHUB_OUTPUT"
 
           # Count vulnerabilities
           TOTAL=$(echo "$AUDIT_JSON" | jq -r '.metadata.vulnerabilities.total // 0')
@@ -45,10 +46,10 @@ jobs:
           HIGH=$(echo "$AUDIT_JSON" | jq -r '.metadata.vulnerabilities.high // 0')
           MODERATE=$(echo "$AUDIT_JSON" | jq -r '.metadata.vulnerabilities.moderate // 0')
 
-          echo "total=$TOTAL" >> $GITHUB_OUTPUT
-          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-          echo "high=$HIGH" >> $GITHUB_OUTPUT
-          echo "moderate=$MODERATE" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "critical=$CRITICAL" >> "$GITHUB_OUTPUT"
+          echo "high=$HIGH" >> "$GITHUB_OUTPUT"
+          echo "moderate=$MODERATE" >> "$GITHUB_OUTPUT"
           set -e
 
       - name: Create issue for vulnerabilities
