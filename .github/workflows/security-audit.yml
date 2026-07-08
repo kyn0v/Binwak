@@ -34,7 +34,17 @@ jobs:
         run: |
           set +e
           cd "${{ matrix.directory }}"
-          AUDIT_JSON=$(npm audit --json 2>/dev/null || echo '{}')
+          # `npm audit --json` frequently exits non-zero (vulnerabilities
+          # found, or — as with our npm mirror — the audit API endpoint not
+          # being implemented) while still printing a valid JSON body. Only
+          # fall back to '{}' if nothing was printed at all; otherwise a
+          # `cmd || echo '{}'` pattern would append a second JSON document,
+          # making jq emit duplicate/multi-line results and corrupt
+          # GITHUB_OUTPUT below.
+          AUDIT_JSON=$(npm audit --json 2>/dev/null)
+          if [ -z "$AUDIT_JSON" ]; then
+            AUDIT_JSON='{}'
+          fi
           DELIMITER="EOF_$(openssl rand -hex 8)"
           echo "audit_result<<$DELIMITER" >> "$GITHUB_OUTPUT"
           echo "$AUDIT_JSON" >> "$GITHUB_OUTPUT"
