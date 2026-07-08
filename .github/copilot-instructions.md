@@ -5,13 +5,13 @@
 
 > 仓库地图、技术栈、目录结构、命令表见 [`AGENTS.md`](../AGENTS.md)；
 > 本地开发 / 干净库 / 可视化 QA / 重置首启的完整流程见
-> [`local-dev` skill](skills/local-dev/SKILL.md)。
+> [`dev` skill](skills/dev/SKILL.md)。
 
 ## 项目铁律（始终生效）
 
 - **本地优先双状态**：状态存在两处——服务端 `server/data/bingo.db` 与客户端微信 Storage，
   二者互相回灌。**只清一边，另一边下次启动会把数据推回去**。要回到全新首启必须按顺序两边都清
-  （见 local-dev skill），别只删一边就以为重置了。
+  （见 dev skill），别只删一边就以为重置了。
 - **不要随意创建 `client/.env.development`**：它会让 dev 构建覆盖生产域名改连本地；反过来，
   调试本地链路时**缺它则小程序会连到生产服务器写真实数据**。改动前先确认当前指向哪。
 - **想要空库测试用 `npm run dev:fresh`**（内存库），不要手删 `bingo.db` 或临时写重置脚本。

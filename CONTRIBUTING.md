@@ -23,7 +23,7 @@
    npm run install:all   # 安装 client / server / admin 全部依赖
    ```
 
-3. **本地跑起来** — 见 [local-dev skill](.github/skills/local-dev/SKILL.md)（常规开发、`dev:fresh` 干净库、`dev:local` 可视化 QA）。
+3. **本地跑起来** — 见 [dev skill](.github/skills/dev/SKILL.md)（常规开发、`dev:fresh` 干净库、`dev:local` 可视化 QA）。
 
 ### 提交改动
 
@@ -81,7 +81,7 @@ Contributions welcome! This is a personal vibe-coded Mini Program, so the flow i
    npm run install:all   # installs client / server / admin
    ```
 
-3. **Run it locally** — see the [local-dev skill](.github/skills/local-dev/SKILL.md) (normal dev, `dev:fresh` clean DB, `dev:local` visual QA).
+3. **Run it locally** — see the [dev skill](.github/skills/dev/SKILL.md) (normal dev, `dev:fresh` clean DB, `dev:local` visual QA).
 
 ### Submitting changes
 
