@@ -1,8 +1,13 @@
 ---
 name: designer
+scope: binwak
+version: 0.1.0
 description: "Frontend design specialist for Binwak — authors implementation-ready UI/UX specs for the mp-weixin client or admin dashboard, OR runs evidence-based visual reviews of PR frontend changes"
 tools: [read, search, execute, edit]
 user-invocable: true
+dependencies:
+  skills:
+    - "https://github.com/kyn0v/Binwak/tree/main/.github/skills/e2e"
 ---
 
 # Binwak Designer Agent

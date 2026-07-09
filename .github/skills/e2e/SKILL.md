@@ -1,5 +1,7 @@
 ---
 name: e2e
+scope: binwak
+version: 0.1.0
 description: >-
   Drive and verify uni-app mp-weixin UI changes through the WeChat DevTools
   simulator via @dcloudio/uni-automator (Jest). Use when you need to run e2e /

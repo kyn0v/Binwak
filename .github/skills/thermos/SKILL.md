@@ -1,5 +1,7 @@
 ---
 name: thermos
+scope: binwak
+version: 0.1.0
 description: "Run a double review in parallel: deep bug/security audit plus strict code-quality audit, then synthesize a single prioritized verdict."
 argument-hint: "[optional base branch, default: main]"
 ---

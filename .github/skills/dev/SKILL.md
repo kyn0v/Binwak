@@ -1,5 +1,7 @@
 ---
 name: dev
+scope: binwak
+version: 0.1.0
 description: "Binwak 本地开发工作流：起本地后端+小程序、干净库测试(dev:fresh)、连真机可视化 QA(dev:local)、重置到全新第一次启动。当需要在本地跑通链路、验证渲染效果、或复现新用户首启时使用。"
 ---
 

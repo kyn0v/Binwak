@@ -1,5 +1,7 @@
 ---
 name: thermo-nuclear-review
+scope: binwak
+version: 0.1.0
 description: "Comprehensive security and correctness audit of branch diffs. Use for thermo review, thermonuclear review, deep PR audit, bug risk checks, breaking-change checks, devex regressions, and feature-gate leak detection."
 argument-hint: "[optional base branch, default: main]"
 ---

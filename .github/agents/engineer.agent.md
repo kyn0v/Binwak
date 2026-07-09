@@ -1,8 +1,14 @@
 ---
 name: engineer
+scope: binwak
+version: 0.1.0
 description: "Engineering agent for Binwak — implements features, fixes bugs across client/server/admin, and opens PRs on kyn0v/Binwak"
 tools: [read, search, execute, edit]
 user-invocable: true
+dependencies:
+  skills:
+    - "https://github.com/kyn0v/Binwak/tree/main/.github/skills/dev"
+    - "https://github.com/kyn0v/Binwak/tree/main/.github/skills/e2e"
 ---
 
 # Binwak Engineer Agent

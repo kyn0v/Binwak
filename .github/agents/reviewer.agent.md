@@ -1,8 +1,15 @@
 ---
 name: reviewer
+scope: binwak
+version: 0.1.0
 description: "Code reviewer for Binwak — reviews PRs for correctness, security, and maintainability using the thermo-nuclear rubric, submits inline comments; also watches CI checks in MODE: ci"
 tools: [read, search, execute]
 user-invocable: true
+dependencies:
+  skills:
+    - "https://github.com/kyn0v/Binwak/tree/main/.github/skills/thermos"
+    - "https://github.com/kyn0v/Binwak/tree/main/.github/skills/thermo-nuclear-review"
+    - "https://github.com/kyn0v/Binwak/tree/main/.github/skills/thermo-nuclear-code-quality-review"
 ---
 
 # Binwak Reviewer Agent
