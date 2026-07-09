@@ -84,10 +84,10 @@ npm --prefix client run test:e2e:mp   # 小程序 E2E（仅本地手动，需开
 
 - **行为铁律 / 命令护栏**：见 [.github/copilot-instructions.md](.github/copilot-instructions.md)（自动加载）。
 - **专职 Agent**（`/agent` 选用，见 `.github/agents/`）：
-  - [designer](.github/agents/designer.agent.md) — 前端设计：为 `client`（小程序）/ `admin`（后台）撰写实现级 UI 规格，或对 PR 前端改动做证据驱动的可视化审查
-  - [engineer](.github/agents/engineer.agent.md) — 跨 `client`/`server`/`admin` 实现功能、修 bug、开 PR
-  - [reviewer](.github/agents/reviewer.agent.md) — 用 thermo-nuclear 双维度 rubric 审查 PR、提交 inline 评论；`MODE: ci` 下盯 CI 检查
-  - [coordinator](.github/agents/coordinator.agent.md) — 编排 issue → PR 全流程：依次调度 designer/engineer/reviewer，自己不写代码、不评审、不合并
+  - [designer](.github/agents/designer/AGENTS.md) — 前端设计：为 `client`（小程序）/ `admin`（后台）撰写实现级 UI 规格，或对 PR 前端改动做证据驱动的可视化审查
+  - [engineer](.github/agents/engineer/AGENTS.md) — 跨 `client`/`server`/`admin` 实现功能、修 bug、开 PR
+  - [reviewer](.github/agents/reviewer/AGENTS.md) — 用 thermo-nuclear 双维度 rubric 审查 PR、提交 inline 评论；`MODE: ci` 下盯 CI 检查
+  - [coordinator](.github/agents/coordinator/AGENTS.md) — 编排 issue → PR 全流程：依次调度 designer/engineer/reviewer，自己不写代码、不评审、不合并
 - **可调用技能**：
   - [dev](.github/skills/dev/SKILL.md) — 本地开发、干净库、可视化 QA、重置首启
   - [e2e](.github/skills/e2e/SKILL.md) — 用 uni-automator 驱动微信开发者工具做真机截图/E2E 验证的踩坑手册
