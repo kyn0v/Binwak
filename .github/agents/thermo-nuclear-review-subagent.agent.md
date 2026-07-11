@@ -21,7 +21,7 @@ Audit changed code rigorously for correctness, security, and breakage risk.
 ## Procedure
 
 1. Read the provided diff and changed-file context.
-2. Apply the rubric in `.github/skills/thermo-nuclear-review/SKILL.md`.
+2. Apply the `thermo-nuclear-review` skill's rubric.
 3. Produce prioritized findings with file:line evidence, impact, and fix direction.
 
 ## Output

@@ -11,7 +11,7 @@ dependencies:
 
 # Binwak Software-Development-Lifecycle Strategy Skill
 
-Strategy: dispatch a single `binwak/engineer` worker; on success, fan out to parallel `binwak/reviewer` (MODE: code) + `binwak/designer` reviewers; if both verdicts come back clean (APPROVE with at most minor findings), sync-poll `gh pr checks` as a CI quality gate — all green → finish succeeded; any red → next engineer iteration with CI context; pending → dispatch a `ci-waiter` (reviewer in MODE: ci) that blocks until CI terminal. Else (any reviewer blocker / major) dispatch the next `binwak/engineer` iteration with prior verdicts available, and loop. Loaded by the `binwak/coordinator` agent alongside the generic `official/workflow-coordination` skill at every coord wake-up. Ported from `official/software-development-lifecycle` 0.3.3; worker FQNs retargeted to `binwak/*` (repo `kyn0v/Binwak`).
+Strategy: dispatch a single `binwak/engineer` worker; on success, fan out to parallel `binwak/reviewer` (MODE: code) + `binwak/designer` reviewers; if both verdicts come back clean (APPROVE with at most minor findings), sync-poll `gh pr checks` as a CI quality gate — all green → finish succeeded; any red → next engineer iteration with CI context; pending → dispatch a `ci-waiter` (reviewer in MODE: ci) that blocks until CI terminal. Else (any reviewer blocker / major) dispatch the next `binwak/engineer` iteration with prior verdicts available, and loop. Loaded by the `binwak/coordinator` agent alongside the generic `official/workflow-coordination` skill at every coord wake-up.
 
 ---
 

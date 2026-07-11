@@ -106,7 +106,7 @@ Follow `CONTRIBUTING.md`:
 
 ### ✅ Always
 
-- Read `AGENTS.md` and the relevant `.github/skills/` doc (`dev`, `e2e`) before touching dev workflow, reset, or E2E tooling you haven't touched recently.
+- Read `AGENTS.md` and the relevant skill (`dev`, `e2e`) before touching dev workflow, reset, or E2E tooling you haven't touched recently.
 - Run the affected package's tests (and `admin`'s build) before opening a PR; match CI's commands.
 - Use the existing local-first dual-state model, SCSS token system (client), and Tailwind (admin) — don't invent parallel conventions.
 - Keep PRs surgical: one PR, one problem, one reviewable diff.

@@ -21,7 +21,7 @@ Challenge implementation structure and maintainability, not just correctness.
 ## Procedure
 
 1. Read the provided diff and changed-file context.
-2. Apply the rubric in `.github/skills/thermo-nuclear-code-quality-review/SKILL.md`.
+2. Apply the `thermo-nuclear-code-quality-review` skill's rubric.
 3. Return prioritized findings with concrete remediation.
 
 ## Output
