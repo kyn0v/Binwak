@@ -1,9 +1,11 @@
 ---
-name: local-dev
+name: dev
+scope: binwak
+version: 0.1.0
 description: "Binwak 本地开发工作流：起本地后端+小程序、干净库测试(dev:fresh)、连真机可视化 QA(dev:local)、重置到全新第一次启动。当需要在本地跑通链路、验证渲染效果、或复现新用户首启时使用。"
 ---
 
-# 本地开发 (local-dev)
+# 本地开发 (dev)
 
 Binwak 是本地优先架构，状态存在 **两处**（服务端 `server/data/bingo.db` 与客户端微信 Storage），
 二者互相回灌。本技能覆盖：常规本地开发、干净库测试、可视化 QA、重置到全新首启。
@@ -76,3 +78,7 @@ npm run reset:local
 - mp-weixin：`npm --prefix client run test:e2e:mp`（无需先 build），需开发者工具开启服务端口且已登录，仅本地手动跑。
 - 配置须保持 `compile: true`，否则报 `wx.$$initRuntimeAutomator not exists`。
 - h5：构建后起静态服务，再 `npm --prefix client run test:e2e:h5`。
+
+跑 mp-weixin e2e / 用真机截图验证 UI 改动时的踩坑操作手册（端口 9420 死锁、代理劫持、
+登录态数据漂移、trust-project 弹窗等），见
+[e2e skill](../e2e/SKILL.md)。

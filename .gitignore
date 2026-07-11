@@ -52,3 +52,9 @@ shared/*.d.ts.map
 
 # Visual regression diff output (kept local; baselines ARE committed)
 client/tests/e2e/**/__diff_output__/
+
+# glyph runtime artifacts (workspace DB, pilot memory, session scratch)
+.pilot/
+workspace.db*
+sessions/
+tasks/

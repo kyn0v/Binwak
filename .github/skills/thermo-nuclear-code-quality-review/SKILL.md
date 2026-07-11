@@ -1,5 +1,7 @@
 ---
 name: thermo-nuclear-code-quality-review
+scope: binwak
+version: 0.1.0
 description: "Run an extremely strict maintainability review for abstractions, giant files, branching/spaghetti growth, type boundaries, and architectural drift in changed code."
 argument-hint: "[optional base branch, default: main]"
 ---
