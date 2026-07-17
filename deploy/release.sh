@@ -3,7 +3,7 @@
 # release.sh — atomic-ish deploy with automatic rollback, run ON THE SERVER.
 #
 # Strategy (minimal & safe): only the STATELESS build output is versioned —
-# server `dist/`, admin `dist/`, and package.json/package-lock.json. The
+# server `dist/` and package.json/package-lock.json. The
 # stateful data (SQLite db, uploads/, .env) lives outside dist/ and is NEVER
 # touched here, so deploys and rollbacks can never lose user data or rotate
 # the JWT secret.
@@ -30,7 +30,6 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/health}"
 PM2_NAME="${PM2_NAME:-binwak-api}"
 KEEP="${KEEP:-3}"
 
-ADMIN_DIR="$(dirname "$APP_PATH")/admin/dist"
 RELEASES="$(dirname "$APP_PATH")/releases"
 INCOMING="$APP_PATH/.incoming"
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -52,7 +51,6 @@ health_check() {
 # ── 1. Back up current live build (skipped on very first deploy) ──────────────
 mkdir -p "$BACKUP"
 [ -d "$APP_PATH/dist" ]            && cp -a "$APP_PATH/dist"            "$BACKUP/dist"
-[ -d "$ADMIN_DIR" ]               && cp -a "$ADMIN_DIR"               "$BACKUP/admin-dist"
 [ -f "$APP_PATH/package.json" ]   && cp -a "$APP_PATH/package.json"   "$BACKUP/"
 [ -f "$APP_PATH/package-lock.json" ] && cp -a "$APP_PATH/package-lock.json" "$BACKUP/"
 log "Backed up current release to $BACKUP"
@@ -60,7 +58,6 @@ log "Backed up current release to $BACKUP"
 restore_backup() {
   log "Rolling back to $BACKUP"
   [ -d "$BACKUP/dist" ]        && rsync -ac --delete "$BACKUP/dist/"        "$APP_PATH/dist/"
-  [ -d "$BACKUP/admin-dist" ]  && { mkdir -p "$ADMIN_DIR"; rsync -ac --delete "$BACKUP/admin-dist/" "$ADMIN_DIR/"; }
   [ -f "$BACKUP/package.json" ]      && cp -a "$BACKUP/package.json"      "$APP_PATH/"
   [ -f "$BACKUP/package-lock.json" ] && cp -a "$BACKUP/package-lock.json" "$APP_PATH/"
   ( cd "$APP_PATH" && npm install --omit=dev --no-audit --no-fund || true )
@@ -73,8 +70,6 @@ if [ ! -d "$INCOMING/dist" ]; then
   exit 1
 fi
 rsync -ac --delete "$INCOMING/dist/" "$APP_PATH/dist/"
-mkdir -p "$ADMIN_DIR"
-[ -d "$INCOMING/admin-dist" ] && rsync -ac --delete "$INCOMING/admin-dist/" "$ADMIN_DIR/"
 [ -f "$INCOMING/package.json" ]      && cp -a "$INCOMING/package.json"      "$APP_PATH/"
 [ -f "$INCOMING/package-lock.json" ] && cp -a "$INCOMING/package-lock.json" "$APP_PATH/"
 log "Swapped in incoming build"

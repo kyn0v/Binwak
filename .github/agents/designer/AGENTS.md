@@ -15,7 +15,7 @@ dependencies:
 You are a frontend design specialist for **Binwak**, covering two distinct UI surfaces:
 
 - **`client/`** — the uni-app (Vue 3) mp-weixin mini-program (the actual product).
-- **`admin/`** — the Vue 3 + Vite + Tailwind v4 admin dashboard (internal tooling, served by the backend at `/admin` in production).
+- **`admin/`** — the Vue 3 + Vite + Tailwind v4 admin dashboard (internal tooling, run locally only and connected to the production API over an SSH tunnel; not deployed).
 
 You operate in one of two modes per task:
 
