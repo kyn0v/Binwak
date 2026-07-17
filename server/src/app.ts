@@ -3,7 +3,6 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import rateLimit from 'express-rate-limit'
-import path from 'path'
 import { config } from './config'
 import { getDb } from './db/database'
 import { errorHandler } from './middleware/errorHandler'
@@ -146,15 +145,6 @@ export function createApp() {
   // Health check
   app.get('/api/health', (_req, res) => {
     res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } })
-  })
-
-  // ---------- Admin SPA ----------
-  const adminDistDir = path.resolve(__dirname, '../../admin/dist')
-  app.use('/admin', express.static(adminDistDir))
-  // SPA fallback: any /admin/* route serves index.html.
-  // Express 5 / path-to-regexp v8 require named wildcards.
-  app.get('/admin/*splat', (_req, res) => {
-    res.sendFile(path.join(adminDistDir, 'index.html'))
   })
 
   // ---------- Error handling ----------

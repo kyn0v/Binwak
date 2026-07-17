@@ -27,7 +27,7 @@
 │   └── tests/       # Vitest 单元测试 + e2e/（uni-automator）
 ├── server/          # Express + SQLite 后端
 │   └── src/         # app.ts / routes / services / db / middleware / utils
-├── admin/           # Vue 3 管理后台（生产由后端在 /admin 静态托管）
+├── admin/           # Vue 3 管理后台（仅本地运行，经 SSH 隧道连生产 API，不部署）
 │   └── src/         # views / components / api.ts / router.ts
 ├── shared/          # 前后端共享类型（types.ts）
 ├── deploy/          # PM2 / Nginx 配置、release.sh、setup.sh

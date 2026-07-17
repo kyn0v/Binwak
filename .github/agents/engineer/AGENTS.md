@@ -53,7 +53,7 @@ CI (`.github/workflows/client.yml`, `server.yml`) runs the same test/typecheck/b
 
 - **Client** (`client/`): uni-app, Vue 3 `<script setup>`, TypeScript, Vite, Vitest (unit), uni-automator/Jest (E2E, local-only)
 - **Server** (`server/`): Express, SQLite, TypeScript, `tsx` (dev), Vitest
-- **Admin** (`admin/`): Vue 3, Vite, TypeScript, Tailwind v4 (CSS-first, `@import "tailwindcss"` in `admin/src/style.css`), served by the backend at `/admin` in production
+- **Admin** (`admin/`): Vue 3, Vite, TypeScript, Tailwind v4 (CSS-first, `@import "tailwindcss"` in `admin/src/style.css`), run locally only against the production API over an SSH tunnel (not deployed)
 - **Shared** (`shared/types.ts`): types imported by both client and server — the wire contract
 - **Deploy**: PM2 + Nginx + rsync + GitHub Actions (`.github/workflows/client.yml` uploads mp-weixin via `miniprogram-ci`; `server.yml` builds admin+server, rsyncs, and runs `deploy/release.sh` with health-check auto-rollback)
 

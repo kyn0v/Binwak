@@ -6,7 +6,6 @@ on:
     paths:
       - 'server/**'
       - 'shared/**'
-      - 'admin/**'
       - 'deploy/**'
       - '.github/workflows/server.yml'
   pull_request:
@@ -32,7 +31,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             server/package-lock.json
-            admin/package-lock.json
 
       - name: Install server dependencies
         run: npm ci --prefix server
@@ -43,14 +41,6 @@ jobs:
       - name: Run tests
         run: npm --prefix server run test
 
-      - name: Install admin dependencies
-        run: npm ci --prefix admin
-
-      - name: Build admin frontend
-        run: npm --prefix admin run build
-
-      # Build server AFTER admin: the server build's postbuild step copies
-      # admin/dist into server/dist/admin, which the server serves at /admin.
       - name: Build server
         run: npm --prefix server run build
 
@@ -65,7 +55,6 @@ jobs:
           if-no-files-found: error
           path: |
             server/dist/
-            admin/dist/
             server/package.json
             server/package-lock.json
 
@@ -116,15 +105,11 @@ jobs:
           # back up the current release and swap this in atomically with rollback.
           INCOMING="${DEPLOY_SERVER_PATH}/.incoming"
           ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "rm -rf '${INCOMING}' && mkdir -p '${INCOMING}/dist' '${INCOMING}/admin-dist'"
+            "rm -rf '${INCOMING}' && mkdir -p '${INCOMING}/dist'"
 
           rsync -az --delete -e "ssh -p ${DEPLOY_PORT:-22}" \
             server/dist/ \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${INCOMING}/dist/"
-
-          rsync -az --delete -e "ssh -p ${DEPLOY_PORT:-22}" \
-            admin/dist/ \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${INCOMING}/admin-dist/"
 
           scp -P "${DEPLOY_PORT:-22}" \
             server/package.json \
