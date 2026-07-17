@@ -1,0 +1,41 @@
+name: Dependabot auto-merge
+
+# Industry-standard dependency hygiene:
+#   - Dependabot (security + version updates) opens the fix PRs itself.
+#   - This workflow auto-approves and enables auto-merge for low-risk updates
+#     (patch, plus security patches), so they land once CI is green.
+#   - Minor/major updates are left for manual review.
+#
+# Requires the repo setting "Allow auto-merge" to be enabled. Auto-merge waits
+# for required status checks (client.yml / server.yml) before merging when
+# branch protection requires them.
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    # Only act on Dependabot's own PRs.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve and enable auto-merge for low-risk updates
+        # Patch-level version bumps and any security update are auto-merged.
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.ghsa-id != ''
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
