@@ -18,17 +18,18 @@ updates:
         patterns:
           - "*"
     ignore:
-      # The uni-app toolchain pins several peers to EXACT versions, so any bump
-      # of these breaks `npm ci` with ERESOLVE/EBADPLATFORM. They can only move
-      # when @dcloudio/* itself does, so let dependabot stop proposing them:
-      #
-      #  - vite: @dcloudio/vite-plugin-uni pins peer vite@5.2.8 exactly.
-      #  - @dcloudio/types: @dcloudio/uni-app pins peer @dcloudio/types@3.4.28.
-      #  - vitest: v4 pulls a nested vite 7 whose esbuild 0.28 foreign-platform
-      #    binaries npm marks "extraneous", breaking `npm ci` on the Linux CI
-      #    runner (EBADPLATFORM). Stay on the vite-5-compatible vitest 3 line.
+      # The uni-app (@dcloudio/*) toolchain ships as pre-release "alpha" builds
+      # whose version strings sort NON-monotonically: npm treats the 2021 build
+      # `...-alpha-3000020210521001` as HIGHER than the 2026 build
+      # `...-alpha-1000920260626810`. Left alone, Dependabot "upgrades" the
+      # plugins to that older alpha, which peer-requires vite@2 and then
+      # conflicts with the vite@8 the current toolchain needs -> `npm ci`
+      # ERESOLVE. These packages must only move together, by hand:
+      - dependency-name: "@dcloudio/*"
+      # vite is pinned by the @dcloudio toolchain (currently vite@8); don't let
+      # Dependabot bump it on its own.
       - dependency-name: vite
-      - dependency-name: "@dcloudio/types"
+      # vitest must stay on the vite-compatible line; block majors.
       - dependency-name: vitest
         update-types:
           - version-update:semver-major
