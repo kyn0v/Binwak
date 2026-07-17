@@ -20,7 +20,7 @@
 2. **安装依赖**
 
    ```bash
-   npm run install:all   # 安装 client / server / admin 全部依赖
+   npm run install:all   # 安装 client / server 全部依赖
    ```
 
 3. **本地跑起来** — 见 [dev skill](.github/skills/dev/SKILL.md)（常规开发、`dev:fresh` 干净库、`dev:local` 可视化 QA）。
@@ -78,7 +78,7 @@ Contributions welcome! This is a personal vibe-coded Mini Program, so the flow i
 2. **Install deps**
 
    ```bash
-   npm run install:all   # installs client / server / admin
+   npm run install:all   # installs client / server
    ```
 
 3. **Run it locally** — see the [dev skill](.github/skills/dev/SKILL.md) (normal dev, `dev:fresh` clean DB, `dev:local` visual QA).

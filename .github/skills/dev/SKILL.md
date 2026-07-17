@@ -21,10 +21,6 @@ npm run dev
 cd client && npm install
 npm run dev:mp-weixin
 # 打开微信开发者工具 → 导入 client/dist/dev/mp-weixin
-
-# 管理后台（生产由后端在 /admin 静态托管）
-cd admin && npm install
-npm run dev
 ```
 
 ## 2. 干净库测试（dev:fresh）
@@ -34,7 +30,7 @@ npm run dev
 - 整个 SQLite 库放内存（`DB_PATH=:memory:`），**进程一启动就是空库、重启即清空、磁盘不写任何文件**。
 - 无需手动删 `server/data/bingo.db` 或写重置脚本。
 - 适合验证「新用户首启引导」这类依赖全新状态的流程。
-- 管理后台账号走环境变量（`ADMIN_USERNAME` / `ADMIN_PASSWORD`），不在数据库里，空库也能登录。
+- 管理 API 账号走环境变量（`ADMIN_USERNAME` / `ADMIN_PASSWORD`），不在数据库里，空库也能登录。
 - 需要数据跨重启保留时仍用 `npm run dev`（持久库）。
 
 > 注意：`dev:fresh` 用 `tsx watch`，改动后端源码触发热重载时内存库会一并清空。

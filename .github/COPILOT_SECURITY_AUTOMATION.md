@@ -6,7 +6,7 @@ This repository has a three-tier automation system to handle dependency vulnerab
 
 ### 1️⃣ **Auto Detection (security-audit.yml)**
 - **Trigger**: Runs automatically every Monday at 09:00 UTC, or manually triggered
-- **Behavior**: Runs `npm audit` on `client/`, `server/`, and `admin/` directories
+- **Behavior**: Runs `npm audit` on `client/` and `server/` directories
 - **Creates Issue**: Automatically creates an issue when HIGH or CRITICAL vulnerabilities are found
 
 ### 2️⃣ **Auto Labeling (assign-copilot.yml)**

@@ -10,8 +10,6 @@
     "server:dev": "cd server && npm run dev",
     "server:build": "cd server && npm run build",
     "server:start": "cd server && npm start",
-    "admin:dev": "cd admin && npm run dev",
-    "admin:build": "cd admin && npm run build",
-    "install:all": "cd client && npm install && cd ../server && npm install && cd ../admin && npm install"
+    "install:all": "cd client && npm install && cd ../server && npm install"
   }
 }
