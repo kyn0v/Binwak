@@ -5,7 +5,8 @@
 ## 这是什么
 
 微信小程序版"城市漫步 Bingo 打卡"。本地优先（local-first）架构：
-**uni-app (Vue 3)** 前端 + **Express / SQLite** 后端 + **Vue 3** 管理后台。
+**uni-app (Vue 3)** 前端 + **Express / SQLite** 后端。管理能力由后端 `/api/admin` 提供，
+管理后台前端**不在本仓库**——仅本地运行、经 SSH 隧道访问 `127.0.0.1:3000` 的 admin API。
 
 ## 技术栈
 
@@ -13,7 +14,6 @@
 |----|------|
 | 客户端 | uni-app, Vue 3, TypeScript, Vite, Vitest, uni-automator (E2E) |
 | 服务端 | Express, SQLite, TypeScript, tsx, Vitest |
-| 管理后台 | Vue 3, Vite, TypeScript |
 | 部署 | PM2, Nginx, rsync, GitHub Actions |
 
 环境要求：Node.js 20+；微信开发者工具（预览 `mp-weixin` 构建产物）。
@@ -25,10 +25,8 @@
 ├── client/          # uni-app 小程序前端
 │   ├── src/         # components / pages / config / utils / static
 │   └── tests/       # Vitest 单元测试 + e2e/（uni-automator）
-├── server/          # Express + SQLite 后端
+├── server/          # Express + SQLite 后端（含 /api/admin 管理 API）
 │   └── src/         # app.ts / routes / services / db / middleware / utils
-├── admin/           # Vue 3 管理后台（仅本地运行，经 SSH 隧道连生产 API，不部署）
-│   └── src/         # views / components / api.ts / router.ts
 ├── shared/          # 前后端共享类型（types.ts）
 ├── deploy/          # PM2 / Nginx 配置、release.sh、setup.sh
 ├── scripts/         # dev-local.sh、reset-local.sh、deploy-server.sh
@@ -51,10 +49,9 @@
 
 | 命令 | 作用 |
 |------|------|
-| `npm run install:all` | 安装 client / server / admin 全部依赖 |
+| `npm run install:all` | 安装 client / server 全部依赖 |
 | `npm run server:dev` | 起后端（持久库 `server/data/bingo.db`） |
 | `npm run client:dev` | 构建小程序到 `client/dist/dev/mp-weixin` |
-| `npm run admin:dev` | 起管理后台 dev server |
 | `npm run dev:local` | 一条命令：起后端 + 客户端 watch 构建 + 打开微信开发者工具 |
 | `npm run reset:local` | 重置本地服务端数据库 |
 
@@ -77,15 +74,15 @@ npm --prefix client run test:e2e:mp   # 小程序 E2E（仅本地手动，需开
 
 | Workflow | 触发条件 | 动作 |
 |----------|----------|------|
-| Server | push main (`server/`, `shared/`, `admin/`, `deploy/`) | 测试 → 构建 → rsync 至远端 → PM2 重启 |
+| Server | push main (`server/`, `shared/`, `deploy/`) | 测试 → 构建 → rsync 至远端 → PM2 重启 |
 | Client | push main (`client/`, `shared/`) | 测试 → 构建 → 上传至微信 |
 
 ## Agent 须知
 
 - **行为铁律 / 命令护栏**：见 [.github/copilot-instructions.md](.github/copilot-instructions.md)（自动加载）。
 - **专职 Agent**（`/agent` 选用，见 `.github/agents/`）：
-  - [designer](.github/agents/designer/AGENTS.md) — 前端设计：为 `client`（小程序）/ `admin`（后台）撰写实现级 UI 规格，或对 PR 前端改动做证据驱动的可视化审查
-  - [engineer](.github/agents/engineer/AGENTS.md) — 跨 `client`/`server`/`admin` 实现功能、修 bug、开 PR
+  - [designer](.github/agents/designer/AGENTS.md) — 前端设计：为 `client`（小程序）撰写实现级 UI 规格，或对 PR 前端改动做证据驱动的可视化审查
+  - [engineer](.github/agents/engineer/AGENTS.md) — 跨 `client`/`server` 实现功能、修 bug、开 PR
   - [reviewer](.github/agents/reviewer/AGENTS.md) — 用 thermo-nuclear 双维度 rubric 审查 PR、提交 inline 评论；`MODE: ci` 下盯 CI 检查
   - [coordinator](.github/agents/coordinator/AGENTS.md) — 编排 issue → PR 全流程：依次调度 designer/engineer/reviewer，自己不写代码、不评审、不合并
 - **可调用技能**：

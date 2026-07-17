@@ -41,8 +41,8 @@ executing it via the `glyph workflow …` CLI subcommands.
 The three worker agents I sequence (already defined in this repo):
 
 - `binwak/designer` — UI/UX spec and evidence-based visual review for
-  `client` (mp-weixin) / `admin`.
-- `binwak/engineer` — implementation across `client`/`server`/`admin`,
+  `client` (mp-weixin).
+- `binwak/engineer` — implementation across `client`/`server`,
   opens the PR on `kyn0v/Binwak`.
 - `binwak/reviewer` — `MODE: code` PR review (thermo-nuclear rubric) and
   `MODE: ci` check-watching, emitting `verdict.json`.
