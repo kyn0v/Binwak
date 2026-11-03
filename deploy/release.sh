@@ -1,28 +1,9 @@
 #!/usr/bin/env bash
-#
-# release.sh — atomic-ish deploy with automatic rollback, run ON THE SERVER.
-#
-# Strategy (minimal & safe): only the STATELESS build output is versioned —
-# server `dist/` and package.json/package-lock.json. The
-# stateful data (SQLite db, uploads/, .env) lives outside dist/ and is NEVER
-# touched here, so deploys and rollbacks can never lose user data or rotate
-# the JWT secret.
-#
-# Flow:
-#   1. Back up the currently-live dist + package files into releases/<ts>/.
-#   2. Swap in the incoming build.
-#   3. npm install (prod) + pm2 restart + health check.
-#   4. If anything fails, restore the backup and restart (auto-rollback).
-#   5. Prune old releases, keeping the most recent $KEEP.
-#
-# Inputs (env):
-#   APP_PATH    : server dir that holds dist/ + package.json (= DEPLOY_SERVER_PATH)
-#   HEALTH_URL  : URL to curl for readiness (default http://127.0.0.1:3000/api/health)
-#   PM2_NAME    : pm2 process name (default binwak-api)
-#   KEEP        : number of releases to retain (default 3)
-#
-# The CI step uploads the new build to $APP_PATH/.incoming/ before running this.
-
+# Run on the server after staging dist/ and both package files in .incoming/.
+# Only build output and dependency manifests are restored. Database migrations
+# and other application side effects are not undone by a code rollback.
+# Exit 0 = healthy release, 1 = rejected bundle or healthy rollback,
+# 2 = deployment failed and rollback failed or was unavailable.
 set -euo pipefail
 
 APP_PATH="${APP_PATH:?APP_PATH is required}"
@@ -30,17 +11,43 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/health}"
 PM2_NAME="${PM2_NAME:-binwak-api}"
 KEEP="${KEEP:-3}"
 
+log() { printf '[release] %s\n' "$*"; }
+
+if [[ ! "$KEEP" =~ ^[1-9][0-9]*$ ]]; then
+  log "ERROR: KEEP must be a positive integer"
+  exit 1
+fi
+
+if [[ "$(node -p 'process.versions.node.split(".")[0]')" != 26 ]]; then
+  log "ERROR: Node.js 26 is required, matching .nvmrc and CI; live files unchanged"
+  exit 1
+fi
+
 RELEASES="$(dirname "$APP_PATH")/releases"
 INCOMING="$APP_PATH/.incoming"
-TS="$(date +%Y%m%d-%H%M%S)"
-BACKUP="$RELEASES/$TS"
+for item in dist package.json package-lock.json; do
+  if [[ ! -e "$INCOMING/$item" ]]; then
+    log "ERROR: incomplete incoming bundle, missing $item"
+    exit 1
+  fi
+done
+if [[ ! -d "$INCOMING/dist" || ! -f "$INCOMING/package.json" || ! -f "$INCOMING/package-lock.json" ]]; then
+  log "ERROR: incoming bundle has invalid file types"
+  exit 1
+fi
 
-log() { printf '[release] %s\n' "$*"; }
+mkdir -p "$RELEASES"
+BACKUP="$(mktemp -d "$RELEASES/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+for item in dist package.json package-lock.json; do
+  if [[ -e "$APP_PATH/$item" ]]; then
+    cp -a "$APP_PATH/$item" "$BACKUP/"
+  fi
+done
+log "Backed up current release to $BACKUP"
 
 health_check() {
   for _ in 1 2 3 4 5; do
-    if curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null; then
-      curl -fsS --max-time 10 "$HEALTH_URL" || true
+    if curl -fsS --max-time 10 "$HEALTH_URL"; then
       return 0
     fi
     sleep 2
@@ -48,70 +55,43 @@ health_check() {
   return 1
 }
 
-# ── 1. Back up current live build (skipped on very first deploy) ──────────────
-mkdir -p "$BACKUP"
-[ -d "$APP_PATH/dist" ]            && cp -a "$APP_PATH/dist"            "$BACKUP/dist"
-[ -f "$APP_PATH/package.json" ]   && cp -a "$APP_PATH/package.json"   "$BACKUP/"
-[ -f "$APP_PATH/package-lock.json" ] && cp -a "$APP_PATH/package-lock.json" "$BACKUP/"
-log "Backed up current release to $BACKUP"
-
-restore_backup() {
-  log "Rolling back to $BACKUP"
-  [ -d "$BACKUP/dist" ]        && rsync -ac --delete "$BACKUP/dist/"        "$APP_PATH/dist/"
-  [ -f "$BACKUP/package.json" ]      && cp -a "$BACKUP/package.json"      "$APP_PATH/"
-  [ -f "$BACKUP/package-lock.json" ] && cp -a "$BACKUP/package-lock.json" "$APP_PATH/"
-  ( cd "$APP_PATH" && npm install --omit=dev --no-audit --no-fund || true )
-  pm2 restart "$PM2_NAME" --update-env || true
+copy_release() {
+  local source="$1"
+  rsync -ac --delete "$source/dist/" "$APP_PATH/dist/" || return 1
+  cp -a "$source/package.json" "$APP_PATH/" || return 1
+  cp -a "$source/package-lock.json" "$APP_PATH/" || return 1
 }
 
-# ── 2. Swap in the incoming build ────────────────────────────────────────────
-if [ ! -d "$INCOMING/dist" ]; then
-  log "ERROR: incoming build not found at $INCOMING/dist"
-  exit 1
-fi
-rsync -ac --delete "$INCOMING/dist/" "$APP_PATH/dist/"
-[ -f "$INCOMING/package.json" ]      && cp -a "$INCOMING/package.json"      "$APP_PATH/"
-[ -f "$INCOMING/package-lock.json" ] && cp -a "$INCOMING/package-lock.json" "$APP_PATH/"
-log "Swapped in incoming build"
+start_release() {
+  # Functions called from an if/&& context cannot rely on Bash errexit.
+  (cd "$APP_PATH" && npm ci --omit=dev --no-audit --no-fund) || return 1
+  pm2 restart "$PM2_NAME" --update-env --kill-timeout 35000 || return 1
+  health_check
+}
 
-# ── 3. Install + restart + health check; rollback on failure ─────────────────
-deploy_ok=1
-(
-  cd "$APP_PATH"
-  npm install --omit=dev --no-audit --no-fund
-  pm2 restart "$PM2_NAME" --update-env
-) && health_check || deploy_ok=0
-
-if [ "$deploy_ok" -ne 1 ]; then
-  log "Deploy failed health check — initiating auto-rollback"
+if copy_release "$INCOMING" && start_release; then
+  log "DEPLOY_OK: release healthy"
+else
+  log "DEPLOY_FAILED: install, restart, copy, or health check failed"
   pm2 logs "$PM2_NAME" --lines 80 --nostream || true
-  if [ -d "$BACKUP/dist" ]; then
-    restore_backup
-    if health_check; then
-      log "Rollback succeeded — service healthy on previous release"
-    else
-      log "Rollback completed but health check still failing"
-    fi
-  else
-    log "No previous release to roll back to (first deploy?)"
+  if [[ ! -d "$BACKUP/dist" || ! -f "$BACKUP/package.json" || ! -f "$BACKUP/package-lock.json" ]]; then
+    log "ROLLBACK_UNAVAILABLE: no complete previous release; manual recovery required"
+    exit 2
   fi
-  # Clean up incoming and signal failure to CI.
-  rm -rf "$INCOMING"
-  exit 1
+  log "Rolling back to $BACKUP"
+  if copy_release "$BACKUP" && start_release; then
+    log "ROLLBACK_OK: previous release healthy; deployment still failed"
+    rm -rf "$INCOMING"
+    exit 1
+  fi
+  log "ROLLBACK_FAILED: service state unknown; manual recovery required; backup retained at $BACKUP"
+  exit 2
 fi
 
-log "Deploy healthy"
-
-# ── 4. Clean up ──────────────────────────────────────────────────────────────
 rm -rf "$INCOMING"
-
-# Prune old releases, keeping the most recent $KEEP.
-if [ -d "$RELEASES" ]; then
-  # shellcheck disable=SC2012
-  ls -1dt "$RELEASES"/*/ 2>/dev/null | tail -n +"$((KEEP + 1))" | while read -r old; do
-    log "Pruning old release: $old"
-    rm -rf "$old"
-  done
-fi
-
-log "Done. Active release: $TS (kept last $KEEP)"
+# shellcheck disable=SC2012
+ls -1dt "$RELEASES"/*/ | tail -n +"$((KEEP + 1))" | while IFS= read -r old; do
+  log "Pruning old release: $old"
+  rm -rf "$old"
+done
+log "Done. Active release: $(basename "$BACKUP") (kept last $KEEP)"
