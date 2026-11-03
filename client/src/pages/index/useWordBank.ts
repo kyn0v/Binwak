@@ -1,11 +1,7 @@
 import { ref } from 'vue'
-import { DEFAULT_WORDS } from './bingoDefaults'
 import { checkContent } from './api'
-import { STORAGE_KEYS } from '@/config/storageKeys'
+import { editBoard } from './useBingoBoard'
 import { MAX_WORDS } from '@/config/limits'
-import { safeGet, safeSet } from '@/utils/safeStorage'
-
-const WORD_BANK_KEY = STORAGE_KEYS.WORD_BANK
 
 function normalizeWord(word: string) {
   return word.trim().replace(/\s+/g, ' ')
@@ -22,68 +18,53 @@ function sanitizeWordList(words: string[]) {
 
 // ── Singleton state (shared across all pages) ──
 const wordBank = ref<string[]>([])
-let loaded = false
+let captureWordEdit: () => () => boolean = () => () => false
+export function installWordEditGuard(capture: typeof captureWordEdit) { captureWordEdit = capture }
 
 export function useWordBank() {
-
-  function loadWordBank() {
-    if (loaded) return
-    const saved = safeGet<string[]>(WORD_BANK_KEY)
-    if (Array.isArray(saved)) {
-      wordBank.value = sanitizeWordList(saved)
-      loaded = true
-      return
-    }
-    wordBank.value = [...DEFAULT_WORDS]
-    loaded = true
-  }
-
-  function persistWordBank() {
-    safeSet(WORD_BANK_KEY, wordBank.value)
-  }
 
   /**
    * Add a word to the word bank (after passing server-side moderation)
    * @returns 'ok' | 'moderation_fail' | 'duplicate' | 'full' | 'empty'
    */
-  async function addWord(word: string): Promise<'ok' | 'moderation_fail' | 'duplicate' | 'full' | 'empty'> {
+  async function addWord(word: string): Promise<'ok' | 'moderation_fail' | 'duplicate' | 'full' | 'empty' | 'save_failed' | 'stale'> {
     const normalized = normalizeWord(word)
     if (!normalized) return 'empty'
     if (wordBank.value.includes(normalized)) return 'duplicate'
     if (wordBank.value.length >= MAX_WORDS) return 'full'
 
-    // Server-side moderation
+    const current = captureWordEdit()
+    if (!current()) return 'stale'
     const check = await checkContent(normalized)
+    if (!current()) return 'stale'
     if (!check.pass) return 'moderation_fail'
-
-    wordBank.value = [normalized, ...wordBank.value]
-    persistWordBank()
-    return 'ok'
+    if (wordBank.value.includes(normalized)) return 'duplicate'
+    if (wordBank.value.length >= MAX_WORDS) return 'full'
+    return editBoard(() => { wordBank.value = [normalized, ...wordBank.value] }) ? 'ok' : 'save_failed'
   }
 
   /**
    * Edit a word (after passing server-side moderation)
    * @returns 'ok' | 'moderation_fail' | 'empty'
    */
-  async function updateWord(index: number, word: string): Promise<'ok' | 'moderation_fail' | 'empty'> {
+  async function updateWord(index: number, word: string): Promise<'ok' | 'moderation_fail' | 'empty' | 'duplicate' | 'save_failed' | 'stale'> {
     const normalized = normalizeWord(word)
     if (!normalized) return 'empty'
 
-    // Server-side moderation
+    const current = captureWordEdit()
+    if (!current()) return 'stale'
+    const original = wordBank.value
     const check = await checkContent(normalized)
+    if (!current() || wordBank.value !== original) return 'stale'
     if (!check.pass) return 'moderation_fail'
-
-    wordBank.value = wordBank.value.map((item, idx) => (idx === index ? normalized : item))
-    persistWordBank()
-    return 'ok'
+    if (wordBank.value.some((word, idx) => idx !== index && word === normalized)) return 'duplicate'
+    return editBoard(() => { wordBank.value = wordBank.value.map((item, idx) => idx === index ? normalized : item) }) ? 'ok' : 'save_failed'
   }
 
   function removeWord(index: number) {
     const removed = wordBank.value[index]
     if (removed === undefined) return null
-    wordBank.value = wordBank.value.filter((_, idx) => idx !== index)
-    persistWordBank()
-    return removed
+    return editBoard(() => { wordBank.value = wordBank.value.filter((_, idx) => idx !== index) }) ? removed : null
   }
 
   /**
@@ -100,30 +81,29 @@ export function useWordBank() {
       if (existing.has(normalized)) continue
       if (wordBank.value.length + newWords.length >= MAX_WORDS) break
       newWords.push(normalized)
+      existing.add(normalized)
     }
 
     if (newWords.length === 0) return { added: 0, blocked: false }
 
     // Bulk moderation
     const allText = newWords.join('\n')
+    const current = captureWordEdit()
+    if (!current()) return { added: 0, blocked: true }
     const check = await checkContent(allText)
-    if (!check.pass) return { added: 0, blocked: true }
-
-    for (const w of newWords) {
-      wordBank.value.push(w)
-    }
-    persistWordBank()
-    return { added: newWords.length, blocked: false }
+    if (!current() || !check.pass) return { added: 0, blocked: true }
+    const merged = sanitizeWordList([...wordBank.value, ...newWords])
+    const added = merged.length - wordBank.value.length
+    if (!editBoard(() => { wordBank.value = merged })) return { added: 0, blocked: true }
+    return { added, blocked: false }
   }
 
   function resetWordBank() {
-    loaded = false
-    wordBank.value = []
+    return editBoard(() => { wordBank.value = [] })
   }
 
   return {
     wordBank,
-    loadWordBank,
     resetWordBank,
     addWord,
     updateWord,

@@ -38,14 +38,14 @@ describe('useIllustMode', () => {
 
   it('loadIllustMode: defaults OFF with no board id', () => {
     const cells = ref<BingoCell[]>([cell(0, 'a', { illustrationPath: '/x.png' })])
-    const m = useIllustMode({ cells, remoteBoardId: ref(null), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(null) })
     m.loadIllustMode()
     expect(m.isIllustMode.value).toBe(false)
   })
 
   it('loadIllustMode: defaults ON when board has illustration cells and no stored pref', () => {
     const cells = ref<BingoCell[]>([cell(0, 'a', { illustrationPath: '/x.png' })])
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
     m.loadIllustMode()
     expect(m.isIllustMode.value).toBe(true)
   })
@@ -53,7 +53,7 @@ describe('useIllustMode', () => {
   it('loadIllustMode: honors a stored preference', () => {
     store.set(`${PREFIX}7`, false)
     const cells = ref<BingoCell[]>([cell(0, 'a', { illustrationPath: '/x.png' })])
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
     m.loadIllustMode()
     expect(m.isIllustMode.value).toBe(false)
   })
@@ -61,33 +61,30 @@ describe('useIllustMode', () => {
   it('autoPopulateIllustrations: fetches, caches, assigns illustrationPath, persists', async () => {
     matchMock.mockResolvedValue({ 瀑布: { illustrationUrl: 'u-pubu', illustrationPath: 'p' } })
     const cells = ref<BingoCell[]>([cell(0, '瀑布')])
-    const persist = vi.fn()
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: persist })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
 
     const ok = await m.autoPopulateIllustrations()
     expect(ok).toBe(true)
     expect(cells.value[0].illustrationPath).toBe('u-pubu')
     expect(m.illustCache.get('瀑布')).toBe('u-pubu')
-    expect(persist).toHaveBeenCalled()
+    expect(cells.value[0].illustrationKey).toBe('p')
   })
 
   it('autoPopulateIllustrations: caches "none" for unmatched words and does not assign', async () => {
     matchMock.mockResolvedValue({})
     const cells = ref<BingoCell[]>([cell(0, '无图词')])
-    const persist = vi.fn()
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: persist })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
 
     const ok = await m.autoPopulateIllustrations()
     expect(ok).toBe(true)
     expect(m.illustCache.get('无图词')).toBe('none')
     expect(cells.value[0].illustrationPath).toBeUndefined()
-    expect(persist).not.toHaveBeenCalled()
   })
 
   it('autoPopulateIllustrations: returns false + toasts on API failure', async () => {
     matchMock.mockRejectedValue(new Error('boom'))
     const cells = ref<BingoCell[]>([cell(0, '瀑布')])
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
 
     const ok = await m.autoPopulateIllustrations()
     expect(ok).toBe(false)
@@ -97,7 +94,7 @@ describe('useIllustMode', () => {
   it('toggleIllustMode: turns on, persists, populates from cache', async () => {
     matchMock.mockResolvedValue({ 瀑布: { illustrationUrl: 'u', illustrationPath: 'p' } })
     const cells = ref<BingoCell[]>([cell(0, '瀑布')])
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
 
     await m.toggleIllustMode()
     expect(m.isIllustMode.value).toBe(true)
@@ -108,7 +105,7 @@ describe('useIllustMode', () => {
   it('toggleIllustMode: falls back to text mode + toasts when no matches', async () => {
     matchMock.mockResolvedValue({})
     const cells = ref<BingoCell[]>([cell(0, '无图词')])
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
 
     await m.toggleIllustMode()
     expect(m.isIllustMode.value).toBe(false)
@@ -119,7 +116,7 @@ describe('useIllustMode', () => {
   it('toggleIllustMode: falls back to text mode on fetch failure', async () => {
     matchMock.mockRejectedValue(new Error('net'))
     const cells = ref<BingoCell[]>([cell(0, '瀑布')])
-    const m = useIllustMode({ cells, remoteBoardId: ref(7), persistState: () => {} })
+    const m = useIllustMode({ cells, remoteBoardId: ref(7) })
 
     await m.toggleIllustMode()
     expect(m.isIllustMode.value).toBe(false)

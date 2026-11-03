@@ -42,15 +42,19 @@ export function resolveApiUrl(url: string): string {
 // ---------- Token management ----------
 
 function getToken(): string {
-  return safeGet<string>(TOKEN_KEY) || ''
+  const token: unknown = safeGet(TOKEN_KEY)
+  return typeof token === 'string' ? token : ''
 }
 
 function setToken(token: string) {
+  authEpoch++
   safeSet(TOKEN_KEY, token)
+  authListeners.forEach(listener => listener())
 }
 
 function getRefreshToken(): string {
-  return safeGet<string>(REFRESH_TOKEN_KEY) || ''
+  const token: unknown = safeGet(REFRESH_TOKEN_KEY)
+  return typeof token === 'string' ? token : ''
 }
 
 function setRefreshToken(token: string) {
@@ -58,8 +62,9 @@ function setRefreshToken(token: string) {
 }
 
 function setAuthTokens(token: string, refreshToken?: string) {
-  setToken(token)
-  if (refreshToken) setRefreshToken(refreshToken)
+  if (typeof token !== 'string' || !token || (refreshToken !== undefined && typeof refreshToken !== 'string')) throw new Error('登录凭据格式无效')
+  uni.setStorageSync(TOKEN_KEY, token)
+  if (refreshToken) uni.setStorageSync(REFRESH_TOKEN_KEY, refreshToken)
 }
 
 function clearToken() {
@@ -70,10 +75,45 @@ function clearRefreshToken() {
   safeRemove(REFRESH_TOKEN_KEY)
 }
 
+export const SERVICE_ID = `${BASE_URL.replace(/\/$/, '')}|${import.meta.env.MODE}`
+const BINDING_KEY = 'binwak-verified-principal-v1'
+let authEpoch = 0
+const authListeners = new Set<() => void>()
+export function onAuthChange(listener: () => void) { authListeners.add(listener); return () => { authListeners.delete(listener) } }
+function verifiedBinding(): { principal: string; token: string } | null {
+  const binding: unknown = safeGet(BINDING_KEY)
+  if (typeof binding !== 'object' || binding === null || !('token' in binding) || !('principal' in binding) || !('service' in binding)) return null
+  if (binding.service !== SERVICE_ID || typeof binding.token !== 'string' || typeof binding.principal !== 'string') return null
+  const prefix = `${SERVICE_ID}/account/`
+  if (!binding.principal.startsWith(prefix) || !/^[1-9]\d*$/.test(binding.principal.slice(prefix.length))) return null
+  return { principal: binding.principal, token: binding.token }
+}
+export function getLastPrincipal(): string | null { return verifiedBinding()?.principal ?? null }
+export function getStoredPrincipal(): string | null {
+  const binding = verifiedBinding()
+  return binding?.token === getToken() ? binding.principal : null
+}
+export function getAuthScope() { return { epoch: authEpoch, token: getToken(), principal: getStoredPrincipal() } }
+export type AuthScope = ReturnType<typeof getAuthScope>
+export function isAuthScopeCurrent(scope: AuthScope) {
+  return scope.epoch === authEpoch && (scope.token === getToken() || (scope.principal !== null && scope.principal === getStoredPrincipal()))
+}
+function assertAuthScope(scope: AuthScope) {
+  if (!isAuthScopeCurrent(scope)) throw new Error('账号已切换，请重试')
+}
+function bindPrincipal(userId: number) {
+  if (!Number.isSafeInteger(userId) || userId <= 0) throw new Error('账号信息无效')
+  const principal = `${SERVICE_ID}/account/${userId}`
+  uni.setStorageSync(BINDING_KEY, { service: SERVICE_ID, principal, token: getToken() })
+  return principal
+}
 function clearAuthTokens() {
+  authEpoch++
   clearToken()
   clearRefreshToken()
+  safeRemove(BINDING_KEY)
   _onLoginStateChange?.(false)
+  authListeners.forEach(listener => listener())
 }
 
 // ---------- Login state change callback ----------
@@ -147,6 +187,8 @@ interface RequestOptions {
   auth?: boolean
   /** Set false to skip mutation dedup (for read-only POST endpoints). Default: true */
   dedup?: boolean
+  scope?: AuthScope
+  token?: string
 }
 
 // ---------- Request dedup ----------
@@ -154,10 +196,11 @@ interface RequestOptions {
 const _inflightMutations = new Set<string>()
 
 function mutationKey(opts: RequestOptions): string {
-  return `${opts.method || 'GET'}:${opts.url}`
+  return `${opts.scope?.epoch}:${opts.method || 'GET'}:${opts.url}`
 }
 
-async function request<T>(opts: RequestOptions): Promise<T> {
+async function request<T>(options: RequestOptions): Promise<T> {
+  const opts = { ...options, data: options.data === undefined ? undefined : JSON.parse(JSON.stringify(options.data)), scope: options.scope ?? getAuthScope() }
   const method = opts.method || 'GET'
   const shouldDedup = opts.dedup !== false && method !== 'GET'
   if (shouldDedup) {
@@ -177,9 +220,9 @@ async function request<T>(opts: RequestOptions): Promise<T> {
 
 /**
  * Internal request executor.
- * On 401 with a stored token, clears it, re-logs in, and retries once.
  */
 async function _doRequest<T>(opts: RequestOptions, allowRetry: boolean): Promise<T> {
+  if (opts.scope && opts.auth !== false) assertAuthScope(opts.scope)
   const traceId = generateTraceId()
   const header: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -187,7 +230,7 @@ async function _doRequest<T>(opts: RequestOptions, allowRetry: boolean): Promise
   }
 
   if (opts.auth !== false) {
-    const token = getToken()
+    const token = opts.token ?? getToken()
     if (token) {
       header['Authorization'] = `Bearer ${token}`
     }
@@ -210,21 +253,27 @@ async function _doRequest<T>(opts: RequestOptions, allowRetry: boolean): Promise
         const serverTraceId = resHeaders['X-Trace-Id'] || resHeaders['x-trace-id'] || traceId
         console.log(`[API] ← ${res.statusCode} ${opts.url} [${serverTraceId}]`)
 
-        // Token expired/invalid → clear, re-login, retry once
         if (res.statusCode === 401 && allowRetry && opts.auth !== false) {
-          clearToken()
-          _onLoginStateChange?.(false)
           try {
-            await _silentLogin()
-            const result = await _doRequest<T>(opts, false)
+            const scope = opts.scope ?? getAuthScope()
+            if (!scope.principal && method !== 'GET') throw new Error('请先验证账号再重试此操作')
+            await _silentLogin(scope)
+            const result = await _doRequest<T>({ ...opts, scope: getAuthScope() }, false)
             resolve(result)
           } catch (retryErr) {
-            clearAuthTokens()
             reject(normalizeAuthError(retryErr))
           }
           return
         }
 
+        if (opts.scope && opts.auth !== false && !isAuthScopeCurrent(opts.scope)) {
+          reject(new Error('账号已切换，请重试'))
+          return
+        }
+        if (!res.data || typeof res.data !== 'object' || !('success' in res.data) || typeof res.data.success !== 'boolean') {
+          reject(new Error('服务器响应格式无效'))
+          return
+        }
         const body = res.data as ApiResponse<T>
         if (res.statusCode >= 200 && res.statusCode < 300 && body.success) {
           resolve(body.data as T)
@@ -234,7 +283,7 @@ async function _doRequest<T>(opts: RequestOptions, allowRetry: boolean): Promise
             recordError(serverTraceId, opts.url, res.statusCode)
             _showTraceModal(serverTraceId)
           }
-          reject(new Error(body.error || `请求失败 (${res.statusCode})`))
+          reject(Object.assign(new Error(body.error || `请求失败 (${res.statusCode})`), { status: res.statusCode, _retryable: res.statusCode >= 500 }))
         }
       },
       fail: (err) => {
@@ -256,6 +305,7 @@ async function requestWithRetry<T>(
   maxRetries = 1,
   delayMs = 2000,
 ): Promise<T> {
+  opts = { ...opts, scope: getAuthScope() }
   let lastErr: any
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -296,8 +346,7 @@ function _showTraceModal(traceId: string) {
   })
 }
 
-/** Silent re-login: call wx.login + POST /api/auth/login, save new token */
-async function _tryRefreshTokenLogin(): Promise<boolean> {
+async function _tryRefreshTokenLogin(scope: AuthScope): Promise<boolean> {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return false
 
@@ -311,57 +360,41 @@ async function _tryRefreshTokenLogin(): Promise<boolean> {
       },
       false,
     )
+    assertAuthScope(scope)
+    if (scope.principal) {
+      const profile = await _doRequest<ProfileResponse>({ url: '/api/auth/profile', token: data.token }, false)
+      assertAuthScope(scope)
+      if (`${SERVICE_ID}/account/${profile.userId}` !== scope.principal) throw new Error('账号已切换，请重新登录')
+    }
     setAuthTokens(data.token, data.refreshToken)
+    if (scope.principal) uni.setStorageSync(BINDING_KEY, { service: SERVICE_ID, principal: scope.principal, token: data.token })
     _onLoginStateChange?.(true)
     return true
-  } catch {
-    clearRefreshToken()
-    return false
+  } catch (error) {
+    assertAuthScope(scope)
+    throw error
   }
 }
 
-function _loginWithWxCode(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    uni.login({
-      provider: 'weixin',
-      success: (loginRes) => {
-        if (!loginRes.code) {
-          reject(new Error('wx.login 未返回 code'))
-          return
-        }
-        _doRequest<LoginResponse>(
-          { url: '/api/auth/login', method: 'POST', data: { code: loginRes.code }, auth: false },
-          false,
-        )
-          .then((data) => {
-            setAuthTokens(data.token, data.refreshToken)
-            _onLoginStateChange?.(true)
-            resolve()
-          })
-          .catch((err) => reject(normalizeAuthError(err)))
-      },
-      fail: (err) => reject(normalizeAuthError(err)),
-    })
+function _silentLogin(scope: AuthScope): Promise<void> {
+  assertAuthScope(scope)
+  if (_silentLoginPromise) return _silentLoginPromise.then(() => {
+    if (scope.epoch !== authEpoch || (scope.principal && getStoredPrincipal() !== scope.principal)) throw new Error('账号已切换，请重试')
   })
-}
-
-function _silentLogin(): Promise<void> {
-  if (_silentLoginPromise) return _silentLoginPromise
-
-  _silentLoginPromise = (async () => {
-    const refreshed = await _tryRefreshTokenLogin()
-    if (refreshed) return
-    await _loginWithWxCode()
-  })().finally(() => {
-    _silentLoginPromise = null
-  })
-
-  return _silentLoginPromise
+  const pending = (async () => {
+    if (await _tryRefreshTokenLogin(scope)) return
+    throw new Error('登录已过期，请重新登录后同步')
+  })().finally(() => { if (_silentLoginPromise === pending) _silentLoginPromise = null })
+  _silentLoginPromise = pending
+  return pending
 }
 
 // ---------- Auth ----------
 
 export async function login(): Promise<LoginResponse> {
+  authEpoch++
+  authListeners.forEach(listener => listener())
+  const scope = getAuthScope()
   return new Promise((resolve, reject) => {
     uni.login({
       provider: 'weixin',
@@ -377,7 +410,10 @@ export async function login(): Promise<LoginResponse> {
             data: { code: loginRes.code },
             auth: false,
           })
+          assertAuthScope(scope)
           setAuthTokens(data.token, data.refreshToken)
+          _onLoginStateChange?.(true)
+          authListeners.forEach(listener => listener())
           resolve(data)
         } catch (err) {
           reject(normalizeAuthError(err))
@@ -401,7 +437,11 @@ export function isLoggedIn(): boolean {
 // ---------- Profile ----------
 
 export async function getProfile(): Promise<ProfileResponse> {
-  return request<ProfileResponse>({ url: '/api/auth/profile' })
+  const epoch = authEpoch
+  const profile = await request<ProfileResponse>({ url: '/api/auth/profile' })
+  if (epoch !== authEpoch) throw new Error('账号已切换，请重试')
+  bindPrincipal(profile.userId)
+  return profile
 }
 
 export async function updateNickname(nickname: string): Promise<ProfileResponse> {
@@ -496,14 +536,6 @@ export async function getWordBank(): Promise<{ words: WordBankItem[] }> {
   return request<{ words: WordBankItem[] }>({ url: '/api/wordbank' })
 }
 
-export async function addWordToBank(word: string): Promise<WordBankItem> {
-  return request<WordBankItem>({
-    url: '/api/wordbank',
-    method: 'POST',
-    data: { word },
-  })
-}
-
 export async function replaceWordBank(words: string[]): Promise<{ words: WordBankItem[] }> {
   return request<{ words: WordBankItem[] }>({
     url: '/api/wordbank/batch',
@@ -512,27 +544,15 @@ export async function replaceWordBank(words: string[]): Promise<{ words: WordBan
   })
 }
 
-export async function deleteWordFromBank(wordId: number): Promise<void> {
-  return request<void>({
-    url: `/api/wordbank/${wordId}`,
-    method: 'DELETE',
-  })
-}
-
 // ---------- Upload ----------
 
-export async function getPresignedUrl(key: string): Promise<string> {
-  const data = await request<{ url: string }>({
-    url: `/api/upload/presigned?key=${encodeURIComponent(key)}`,
-  })
-  return data.url
+export async function uploadImage(filePath: string, boardId?: number, position?: number): Promise<UploadResponse> {
+  return _doUpload(filePath, boardId, position, getAuthScope())
 }
 
-export async function uploadImage(filePath: string, boardId?: number, position?: number): Promise<UploadResponse> {  return _doUpload(filePath, boardId, position, true)
-}
-
-/** Internal upload executor with 401 retry support */
-function _doUpload(filePath: string, boardId?: number, position?: number, allowRetry = true): Promise<UploadResponse> {
+/** Upload POSTs are not replayed after an ambiguous response. */
+function _doUpload(filePath: string, boardId: number | undefined, position: number | undefined, scope: AuthScope): Promise<UploadResponse> {
+  assertAuthScope(scope)
   const token = getToken()
   const header: Record<string, string> = {}
   if (token) header.Authorization = `Bearer ${token}`
@@ -549,24 +569,14 @@ function _doUpload(filePath: string, boardId?: number, position?: number, allowR
       formData,
       header,
       success: async (res) => {
-        // 401 retry: clear token, re-login, retry once
-        if (res.statusCode === 401 && allowRetry) {
-          clearToken()
-          _onLoginStateChange?.(false)
-          try {
-            await _silentLogin()
-            const result = await _doUpload(filePath, boardId, position, false)
-            resolve(result)
-          } catch (retryErr) {
-            clearAuthTokens()
-            reject(normalizeAuthError(retryErr))
-          }
+        if (!isAuthScopeCurrent(scope) || res.statusCode === 401) {
+          reject(new Error('登录已变更，照片未完成上传，请重试'))
           return
         }
 
         try {
           const body = JSON.parse(res.data) as ApiResponse<UploadResponse>
-          if (body.success && body.data) {
+          if (res.statusCode >= 200 && res.statusCode < 300 && body.success && body.data && typeof body.data.fileName === 'string' && typeof body.data.url === 'string') {
             resolve(body.data)
           } else {
             reject(new Error(body.error || '上传失败'))
@@ -718,10 +728,11 @@ export async function matchIllustrations(words: string[]): Promise<Record<string
 }
 
 export function uploadIllustration(filePath: string, word: string): Promise<Illustration> {
-  return _doIllustUpload(filePath, word, true)
+  return _doIllustUpload(filePath, word, getAuthScope())
 }
 
-function _doIllustUpload(filePath: string, word: string, allowRetry = true): Promise<Illustration> {
+function _doIllustUpload(filePath: string, word: string, scope: AuthScope): Promise<Illustration> {
+  assertAuthScope(scope)
   const token = getToken()
   const header: Record<string, string> = {}
   if (token) header.Authorization = `Bearer ${token}`
@@ -734,22 +745,13 @@ function _doIllustUpload(filePath: string, word: string, allowRetry = true): Pro
       formData: { word },
       header,
       success: async (res) => {
-        if (res.statusCode === 401 && allowRetry) {
-          clearToken()
-          _onLoginStateChange?.(false)
-          try {
-            await _silentLogin()
-            const result = await _doIllustUpload(filePath, word, false)
-            resolve(result)
-          } catch (retryErr) {
-            clearAuthTokens()
-            reject(normalizeAuthError(retryErr))
-          }
+        if (!isAuthScopeCurrent(scope) || res.statusCode === 401) {
+          reject(new Error('登录已变更，请重试'))
           return
         }
         try {
           const body = JSON.parse(res.data) as ApiResponse<Illustration>
-          if (body.success && body.data) {
+          if (res.statusCode >= 200 && res.statusCode < 300 && body.success && body.data && typeof body.data.imagePath === 'string' && typeof body.data.word === 'string') {
             resolve(body.data)
           } else {
             reject(new Error(body.error || '上传失败'))

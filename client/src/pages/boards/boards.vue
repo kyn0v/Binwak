@@ -320,10 +320,9 @@ function onBack() {
   uni.navigateBack()
 }
 
-const { currentThemeId, loadTheme, getThemeStyle } = useTheme()
-const { fetchBoards, switchBoard, removeBoard, createAndSwitchBoard, renameBoard, duplicateBoard } = useSync()
-
-const GRID_SIZE_OPTIONS = [3, 4, 5, 6, 7]
+const { currentThemeId, getThemeStyle } = useTheme()
+const { fetchBoards, switchBoard, removeBoard, createAndSwitchBoard, renameBoard, duplicateBoard, isKnownEmpty } = useSync()
+import { GRID_SIZE_OPTIONS } from '../index/bingoDefaults'
 
 const boards = ref<BoardItem[]>([])
 const loading = ref(true)
@@ -346,10 +345,7 @@ const showFavoriteOnly = ref(false)
 const favTemplates = ref<TemplateListItem[]>([])
 const favLoading = ref(false)
 
-// Empty boards = no images (active board included, handled specially during delete)
-const emptyBoards = computed(() =>
-  boards.value.filter(b => (b.imageCount ?? 0) === 0)
-)
+const emptyBoards = computed(() => boards.value.filter(b => isKnownEmpty(b.id)))
 
 const showCleanupDialog = ref(false)
 const cleanupSelected = ref<Set<number>>(new Set())
@@ -657,22 +653,6 @@ async function onConfirmRename() {
   }
 }
 
-// Switch away from `board` before deleting it: pick another board, or create one.
-// Returns true if it's now safe to delete `board`.
-async function switchAwayFromActiveBoard(board: BoardItem): Promise<boolean> {
-  const switchTarget = boards.value.find((b) => b.id !== board.id)
-  if (switchTarget) {
-    const ok = await switchBoard(switchTarget.id)
-    return !!ok
-  }
-  const result = await createAndSwitchBoard(
-    defaultBoardTitle(),
-    board.gridSize,
-    currentThemeId.value,
-  )
-  return !!result
-}
-
 async function onDeleteBoard(board: BoardItem) {
   const isActive = board.isActive
   const content = isActive
@@ -688,13 +668,6 @@ async function onDeleteBoard(board: BoardItem) {
       if (!res.confirm) return
       uni.showLoading({ title: '删除中...' })
       try {
-        if (isActive) {
-          const switched = await switchAwayFromActiveBoard(board)
-          if (!switched) {
-            uni.showToast({ title: '切换卡片失败，删除已取消', icon: 'none' })
-            return
-          }
-        }
         const ok = await removeBoard(board.id)
         if (ok) {
           boards.value = boards.value.filter((b) => b.id !== board.id)
@@ -747,19 +720,6 @@ async function onConfirmCleanup() {
 
   // Handle active board deletion last
   if (deletingActive && activeBoard) {
-    const switchTarget = boards.value.find(
-      b => !b.isActive && b.id !== activeBoard.id
-    )
-    if (switchTarget) {
-      await switchBoard(switchTarget.id)
-    } else {
-      const result = await createAndSwitchBoard(defaultBoardTitle(), 4, 'mono')
-      if (!result) {
-        uni.hideLoading()
-        uni.showToast({ title: deleted > 0 ? `已清理 ${deleted} 张空白卡` : '清理失败', icon: deleted > 0 ? 'success' : 'none' })
-        return
-      }
-    }
     const ok = await removeBoard(activeBoard.id)
     if (ok) {
       deleted++
@@ -776,7 +736,6 @@ async function onConfirmCleanup() {
 }
 
 onMounted(() => {
-  loadTheme()
   loadBoards()
 })
 </script>

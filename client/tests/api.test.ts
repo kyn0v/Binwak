@@ -108,7 +108,7 @@ describe('request basics', () => {
 
   it('sends Authorization header when token exists', async () => {
     storage['binwak-auth-token'] = 'my-token'
-    simulateSuccess({ openid: '123', nickname: 'test' })
+    simulateSuccess({ userId: 123, nickname: 'test' })
     await getProfile()
     const callOpts = requestMock.mock.calls[0][0]
     expect(callOpts.header.Authorization).toBe('Bearer my-token')
