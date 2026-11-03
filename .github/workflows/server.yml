@@ -7,12 +7,21 @@ on:
       - 'server/**'
       - 'shared/**'
       - 'deploy/**'
+      - 'scripts/**'
       - '.github/workflows/server.yml'
+      - 'package.json'
+      - '.nvmrc'
   pull_request:
     branches: [main]
     paths:
+      - 'tools/wechat-upload/**'
       - 'server/**'
       - 'shared/**'
+      - 'deploy/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - '.nvmrc'
   workflow_dispatch:
 
 concurrency:
@@ -27,13 +36,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: |
             server/package-lock.json
 
       - name: Install server dependencies
         run: npm ci --prefix server
+
+      - name: Operations safety tests
+        run: npm run test:ops
 
       - name: Type check
         run: cd server && npx tsc --noEmit

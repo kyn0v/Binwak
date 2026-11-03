@@ -13,11 +13,15 @@ echo "=========================================="
 echo "[1/5] Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
-# 2. Install Node.js 20
-echo "[2/5] Installing Node.js 20..."
+NODE_MAJOR="$(tr -d '[:space:]' < "$(dirname "$0")/../.nvmrc")"
+echo "[2/5] Checking Node.js $NODE_MAJOR..."
 if ! command -v node &> /dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | sudo -E bash -
     sudo apt install -y nodejs
+fi
+if [[ "$(node -p 'process.versions.node.split(".")[0]')" != "$NODE_MAJOR" ]]; then
+    echo "Expected Node.js $NODE_MAJOR. Upgrade the existing runtime before continuing." >&2
+    exit 1
 fi
 echo "Node.js version: $(node -v)"
 echo "npm version: $(npm -v)"
@@ -50,7 +54,7 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo "  1. Upload the code to $APP_DIR"
-echo "  2. cd $APP_DIR/server && npm install --production"
+echo "  2. cd $APP_DIR/server && npm ci (build needs dev dependencies)"
 echo "  3. Copy .env.example to .env and configure it"
 echo "  4. npm run build"
 echo "  5. pm2 start ecosystem.config.js"

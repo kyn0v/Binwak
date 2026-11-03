@@ -17,6 +17,7 @@ module.exports = {
       // Process management
       instances: 1,              // Single instance because SQLite does not support multi-process writes.
       exec_mode: 'fork',
+      kill_timeout: 35000,
       
       // Auto restart
       watch: false,

@@ -2,14 +2,18 @@
   "name": "binwak",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=26 <27"
+  },
   "scripts": {
     "dev:local": "bash scripts/dev-local.sh",
     "reset:local": "bash scripts/reset-local.sh",
     "client:dev": "cd client && npm run dev:mp-weixin",
-    "client:build": "cd client && npm run build:mp-weixin",
+    "client:build": "bash scripts/build-client-production.sh",
     "server:dev": "cd server && npm run dev",
     "server:build": "cd server && npm run build",
     "server:start": "cd server && npm start",
-    "install:all": "cd client && npm install && cd ../server && npm install"
+    "install:all": "npm ci --prefix client && npm ci --prefix server",
+    "test:ops": "node --test scripts/tests/*.test.cjs"
   }
 }
