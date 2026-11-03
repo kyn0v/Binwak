@@ -47,7 +47,7 @@ import { useTheme } from '../index/useTheme'
 import { getMyTemplates, deleteTemplate } from '../index/api'
 import type { TemplateListItem } from '../../../../shared/types'
 
-const { getThemeStyle, loadTheme } = useTheme()
+const { getThemeStyle } = useTheme()
 
 const myTemplates = ref<TemplateListItem[]>([])
 const loading = ref(true)
@@ -99,7 +99,6 @@ async function onDeleteTemplate(id: number) {
 }
 
 onMounted(() => {
-  loadTheme()
   fetchMyTemplates()
 })
 </script>

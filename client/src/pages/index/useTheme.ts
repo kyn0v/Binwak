@@ -82,27 +82,16 @@ export const THEMES: Theme[] = [
   },
 ]
 
-import { STORAGE_KEYS } from '@/config/storageKeys'
-import { safeGet, safeSet } from '@/utils/safeStorage'
-
-const THEME_KEY = STORAGE_KEYS.THEME
+import { editBoard } from './useBingoBoard'
 
 const currentThemeId = ref('mono')
 
 export function useTheme() {
   const theme = computed(() => THEMES.find(t => t.id === currentThemeId.value) || THEMES[0])
 
-  function loadTheme() {
-    const saved = safeGet<string>(THEME_KEY)
-    if (saved && THEMES.some(t => t.id === saved)) {
-      currentThemeId.value = saved
-    }
-  }
-
   function setTheme(id: string) {
     if (!THEMES.some(t => t.id === id)) return
-    currentThemeId.value = id
-    safeSet(THEME_KEY, id)
+    return editBoard(() => { currentThemeId.value = id })
   }
 
   function getThemeStyle() {
@@ -142,7 +131,6 @@ export function useTheme() {
   return {
     theme,
     currentThemeId,
-    loadTheme,
     setTheme,
     getThemeStyle,
     themes: THEMES,

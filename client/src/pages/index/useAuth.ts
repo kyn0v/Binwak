@@ -20,8 +20,8 @@ export function useAuth() {
    * Attempt silent login (if not already logged in).
    * Returns true if login succeeded or the user was already logged in.
    */
-  async function ensureLoggedIn(): Promise<boolean> {
-    if (apiIsLoggedIn()) {
+  async function ensureLoggedIn(force = false): Promise<boolean> {
+    if (!force && apiIsLoggedIn()) {
       loggedIn.value = true
       offlineReason.value = ''
       return true

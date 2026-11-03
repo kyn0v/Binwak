@@ -86,7 +86,7 @@ import { createTemplate, updateBoardPublish, getPublishQuota } from '../index/ap
 import type { PublishQuota } from '../index/api'
 import type { TemplateCategory } from '../../../../shared/types'
 
-const { getThemeStyle, loadTheme } = useTheme()
+const { getThemeStyle } = useTheme()
 const { gridSize, cells, boardTitle } = useBingoBoard()
 const { ensureLoggedIn } = useAuth()
 const { remoteBoardId } = useSync()
@@ -172,7 +172,6 @@ async function onPublish() {
 }
 
 onMounted(async () => {
-  loadTheme()
   // Pre-fill title from board title
   if (boardTitle.value && boardTitle.value !== '我的Bingo卡') {
     publishTitle.value = boardTitle.value

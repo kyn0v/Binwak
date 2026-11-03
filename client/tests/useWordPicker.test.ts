@@ -148,6 +148,26 @@ describe('useWordPicker', () => {
     expect(toasts).toContain('该词已存在')
   })
 
+  it('does not assign a delayed picker to a replaced cell', () => {
+    const { wp, cells } = setup({ cells: [cell(0, 'A')] })
+    wp.openWordPicker(0)
+    cells.value = [cell(0, 'B')]
+    wp.assignWordToTarget('old selection')
+    expect(cells.value[0].title).toBe('B')
+  })
+
+  it('does not attach a delayed illustration to a newer word', async () => {
+    const { wp, cells } = setup({ cells: [cell(0, 'A')], bank: [] })
+    let finish!: (matches: unknown) => void
+    matchMock.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    wp.openWordPicker(0); wp.assignWordToTarget('first word')
+    cells.value[0].title = 'newer word'
+    finish({ 'first word': { illustrationPath: 'old-key', illustrationUrl: 'old-url' } })
+    await Promise.resolve(); await Promise.resolve()
+    expect(cells.value[0].title).toBe('newer word')
+    expect(cells.value[0].illustrationPath).toBeUndefined()
+  })
+
   it('closeWordPicker clears all state', () => {
     const { wp } = setup()
     wp.openWordPicker(1)
