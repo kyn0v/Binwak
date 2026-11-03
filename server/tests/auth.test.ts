@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app'
 import { createTestUser, createExpiredToken, authHeader } from './helpers'
+
+vi.mock('../src/services/wechat', () => ({
+  code2Session: vi.fn().mockRejectedValue(new Error('invalid appid')),
+}))
 
 const app = createApp()
 
@@ -57,11 +61,10 @@ describe('POST /api/auth/login', () => {
     expect(res.body.error).toContain('code')
   })
 
-  it('returns 500 when wx appid is invalid (expected in test env)', async () => {
+  it('returns 500 when WeChat rejects the login credentials', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ code: 'test-code' })
-    // The WeChat API returns an error because appid/secret are fake in tests.
     expect(res.status).toBe(500)
     expect(res.body.success).toBe(false)
   })
