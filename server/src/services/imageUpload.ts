@@ -13,7 +13,6 @@ import fs from 'fs'
 import multer from 'multer'
 import type { Database } from 'better-sqlite3'
 import { config } from '../config'
-import type { StorageDriver } from './storage'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
@@ -57,12 +56,9 @@ export function imageMulter(options: { maxBytes: number }): multer.Multer {
 }
 
 /**
- * Upsert an illustration row for (word, userId), replacing any previous storage
- * object only after the DB write commits. Returns the previous image key (if
- * any) so the caller can delete the now-orphaned object.
- *
- * Throws if the DB write fails; the caller is responsible for deleting the
- * freshly stored object in that case.
+ * Upsert an illustration reference for (word, userId) and report its former key.
+ * Keep old and failed-write objects. A later board write may still attach these
+ * shareable keys, so a reference scan cannot make inline deletion safe.
  */
 export function upsertIllustration(
   db: Database,
@@ -83,9 +79,4 @@ export function upsertIllustration(
   `).run(word, userId, imageKey)
 
   return { previousKey: existing?.image_path || null }
-}
-
-/** Delete a storage object, swallowing any error (best-effort cleanup). */
-export async function deleteStorageObjectQuietly(storage: StorageDriver, key: string): Promise<void> {
-  await storage.delete(key).catch(() => {})
 }

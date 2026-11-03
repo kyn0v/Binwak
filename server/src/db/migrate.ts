@@ -47,13 +47,11 @@ function appliedVersions(db: Database.Database): Set<string> {
   return new Set(rows.map((r) => r.version))
 }
 
-function hasColumn(db: Database.Database, table: string, column: string): boolean {
-  try {
-    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-    return cols.some((c) => c.name === column)
-  } catch {
-    return false
-  }
+interface LegacyColumn {
+  name: string
+  type: string
+  notnull: number
+  dflt_value: string | null
 }
 
 /**
@@ -64,13 +62,28 @@ function hasColumn(db: Database.Database, table: string, column: string): boolea
  */
 function baselineLegacyDb(db: Database.Database, applied: Set<string>): void {
   if (applied.has('0001_add_user_and_template_columns')) return
-  const legacyAlreadyMigrated = hasColumn(db, 'users', 'kind')
-  if (legacyAlreadyMigrated) {
-    db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)').run(
-      '0001_add_user_and_template_columns'
-    )
-    applied.add('0001_add_user_and_template_columns')
+  const expected = [
+    { table: 'users', name: 'kind', notnull: 1, defaultValue: "'wechat'" },
+    { table: 'users', name: 'image_storage', notnull: 1, defaultValue: "'local'" },
+    { table: 'template_cells', name: 'image_path', notnull: 0, defaultValue: "''" },
+  ]
+  const columns = expected.map(column => {
+    const rows = db.prepare(`PRAGMA table_info(${column.table})`).all() as LegacyColumn[]
+    return { expected: column, actual: rows.find(row => row.name === column.name) }
+  })
+  if (columns.every(column => column.actual === undefined)) return
+  const missing = columns.filter(column => column.actual === undefined)
+  if (missing.length) {
+    throw new Error(`Partial legacy schema for migration 0001; missing ${missing.map(column => `${column.expected.table}.${column.expected.name}`).join(', ')}. Restore a complete backup before retrying.`)
   }
+  const incompatible = columns.filter(({ expected, actual }) =>
+    actual?.type.toUpperCase() !== 'TEXT' || actual.notnull !== expected.notnull || actual.dflt_value !== expected.defaultValue
+  )
+  if (incompatible.length) {
+    throw new Error(`Incompatible legacy schema for migration 0001: ${incompatible.map(column => `${column.expected.table}.${column.expected.name}`).join(', ')}. Restore a complete backup before retrying.`)
+  }
+  db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run('0001_add_user_and_template_columns')
+  applied.add('0001_add_user_and_template_columns')
 }
 
 /** Apply all pending migrations in order. Throws on the first failure. */

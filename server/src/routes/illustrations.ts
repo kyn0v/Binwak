@@ -3,10 +3,11 @@ import path from 'path'
 import { config } from '../config'
 import { getDb } from '../db/database'
 import { authMiddleware } from '../middleware/auth'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { getStorage } from '../services/storage'
 import { checkImageSync } from '../services/moderation'
 import { prepareImageForStorage, cleanupFiles } from '../services/imageProcessing'
-import { imageMulter, upsertIllustration, deleteStorageObjectQuietly } from '../services/imageUpload'
+import { imageMulter, upsertIllustration } from '../services/imageUpload'
 import type { ApiResponse, Illustration } from '../../../shared/types'
 
 const router = Router()
@@ -19,7 +20,7 @@ const upload = imageMulter({ maxBytes: 5 * 1024 * 1024 })
  * GET /api/illustrations
  * List all illustrations for the current user.
  */
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const userId = req.user!.userId
   const db = getDb()
   const storageDriver = getStorage()
@@ -42,7 +43,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }))
 
   res.json({ success: true, data: { illustrations } } as ApiResponse)
-})
+}))
 
 // ── Shared illustration match logic ──
 async function matchWords(req: Request, res: Response, words: string[]): Promise<void> {
@@ -81,17 +82,17 @@ async function matchWords(req: Request, res: Response, words: string[]): Promise
  * Given a list of words, return matching illustrations for the user.
  * Body: { words: string[] }
  */
-router.post('/match', async (req: Request, res: Response): Promise<void> => {
+router.post('/match', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const words: string[] = Array.isArray(req.body?.words) ? req.body.words : []
-  matchWords(req, res, words.map(w => String(w).trim()).filter(Boolean))
-})
+  await matchWords(req, res, words.map(w => String(w).trim()).filter(Boolean))
+}))
 
 /**
  * POST /api/illustrations
  * Upload illustration for a word.
  * Form data: image (file), word (string)
  */
-router.post('/', upload.single('image'), async (req: Request, res: Response): Promise<void> => {
+router.post('/', upload.single('image'), asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const word = (req.body.word || '').trim()
   if (!word) {
     res.status(400).json({ success: false, error: '请提供词语' } as ApiResponse)
@@ -141,19 +142,12 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
 
   const db = getDb()
 
-  // Replace DB reference first; delete the old object only after the DB update.
-  let previousKey: string | null
   try {
-    ;({ previousKey } = upsertIllustration(db, word, userId, storageResult.key))
+    upsertIllustration(db, word, userId, storageResult.key)
   } catch (err) {
-    await deleteStorageObjectQuietly(storageDriver, storageResult.key)
     console.error('[Illustration] DB save error:', err)
     res.status(500).json({ success: false, error: '保存插画记录失败' } as ApiResponse)
     return
-  }
-
-  if (previousKey) {
-    await deleteStorageObjectQuietly(storageDriver, previousKey)
   }
 
   const row = db.prepare(
@@ -169,13 +163,13 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
   }
 
   res.status(201).json({ success: true, data: illustration } as ApiResponse)
-})
+}))
 
 /**
  * DELETE /api/illustrations/:id
  * Delete user's own illustration.
  */
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const id = parseInt(req.params.id as string)
   if (!Number.isFinite(id)) {
     res.status(400).json({ success: false, error: '无效的 ID' } as ApiResponse)
@@ -194,11 +188,9 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
     return
   }
 
-  const storageDriver = getStorage()
-  await storageDriver.delete(row.image_path)
   db.prepare('DELETE FROM illustrations WHERE id = ?').run(id)
 
   res.json({ success: true } as ApiResponse)
-})
+}))
 
 export default router

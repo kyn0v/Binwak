@@ -5,6 +5,7 @@ import { getDb } from '../db/database'
 import { code2Session } from '../services/wechat'
 import { checkText } from '../services/moderation'
 import { authMiddleware, AuthRequest } from '../middleware/auth'
+import { asyncRoute } from '../middleware/asyncRoute'
 import type { LoginRequest, LoginResponse, ProfileResponse, UpdateProfileRequest, ApiResponse } from '../../../shared/types'
 
 const router = Router()
@@ -63,7 +64,7 @@ function generateTokens(userId: number, openid: string) {
  * POST /api/auth/login
  * Exchange wx.login() code for JWT token
  */
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   try {
     const { code } = req.body as LoginRequest
 
@@ -122,7 +123,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       error: '登录失败，请稍后再试',
     } as ApiResponse)
   }
-})
+}))
 
 /**
  * POST /api/auth/refresh
@@ -212,7 +213,7 @@ router.get('/profile', authMiddleware, (req: AuthRequest, res: Response): void =
 /**
  * PUT /api/auth/profile
  */
-router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/profile', authMiddleware, asyncRoute(async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { nickname, imageStorage } = req.body as UpdateProfileRequest
 
@@ -280,6 +281,6 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response): 
       error: '更新用户信息失败',
     } as ApiResponse)
   }
-})
+}))
 
 export default router

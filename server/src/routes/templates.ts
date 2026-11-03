@@ -1,14 +1,17 @@
 /**
  * Template marketplace API routes
  */
+import crypto from 'crypto'
 import { Router, Request, Response } from 'express'
 import { getDb, SYSTEM_ADMIN_DISPLAY_NAME } from '../db/database'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { authMiddleware, optionalAuth, AuthRequest } from '../middleware/auth'
 import { getStorage } from '../services/storage'
-import { validateIdParam, isValidCategory, escapeLikePattern, CELL_TITLE_MAX_LEN } from '../middleware/validate'
+import { validateIdParam, isValidCategory, escapeLikePattern } from '../middleware/validate'
+import { parseTemplateCreate } from '../utils/writeValidation'
 import { checkText } from '../services/moderation'
 import { copyIllustrationsToTemplate } from '../services/templateSnapshot'
-import type { Template, TemplateListItem, CreateTemplateRequest, TemplateCategory, ApiResponse } from '../../../shared/types'
+import type { Template, TemplateListItem, TemplateCategory } from '../../../shared/types'
 
 const router = Router()
 
@@ -16,10 +19,7 @@ const router = Router()
 router.param('id', (req, res, next) => validateIdParam(req, res, next))
 
 // ── Validation constants ──
-const GRID_SIZE_MIN = 3
-const GRID_SIZE_MAX = 6
 const TITLE_MAX_LEN = 30
-const DESC_MAX_LEN = 100
 const DAILY_PUBLISH_LIMIT = 3
 const MAX_TEMPLATES_PER_USER = 30
 
@@ -286,7 +286,13 @@ router.get('/:id', optionalAuth, (req: Request, res: Response) => {
 })
 
 // ── POST /api/templates - create template (auth required) ──
-router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/', authMiddleware, asyncRoute(async (req: AuthRequest, res: Response) => {
+  const parsed = parseTemplateCreate(req.body)
+  if (!parsed.ok) {
+    res.status(400).json({ success: false, error: parsed.error })
+    return
+  }
+  const { title, description, gridSize, cells, category } = parsed.value
   const db = getDb()
   const userId = req.user!.userId
 
@@ -306,65 +312,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ success: false, error: `每天最多发布 ${DAILY_PUBLISH_LIMIT} 个模板，明天再来吧` })
       return
     }
-  }
-
-  const { title, description, gridSize, cells, category } = req.body as CreateTemplateRequest
-
-  // Validation
-  if (!title || typeof title !== 'string' || title.trim().length === 0) {
-    res.status(400).json({ success: false, error: '标题不能为空' })
-    return
-  }
-  if (title.trim().length > TITLE_MAX_LEN) {
-    res.status(400).json({ success: false, error: `标题长度不能超过 ${TITLE_MAX_LEN} 字符` })
-    return
-  }
-  if (description && typeof description === 'string' && description.length > DESC_MAX_LEN) {
-    res.status(400).json({ success: false, error: `描述长度不能超过 ${DESC_MAX_LEN} 字符` })
-    return
-  }
-
-  if (!gridSize || typeof gridSize !== 'number' || !Number.isInteger(gridSize)) {
-    res.status(400).json({ success: false, error: 'gridSize 无效' })
-    return
-  }
-  if (gridSize < GRID_SIZE_MIN || gridSize > GRID_SIZE_MAX) {
-    res.status(400).json({ success: false, error: `gridSize 必须在 ${GRID_SIZE_MIN}~${GRID_SIZE_MAX} 之间` })
-    return
-  }
-
-  const expectedCells = gridSize * gridSize
-  if (!cells || !Array.isArray(cells) || cells.length !== expectedCells) {
-    res.status(400).json({ success: false, error: `cells 数量必须等于 gridSize² (${expectedCells})` })
-    return
-  }
-
-  // Cell title length validation
-  for (const cell of cells) {
-    if (cell.title && typeof cell.title === 'string' && cell.title.length > CELL_TITLE_MAX_LEN) {
-      res.status(400).json({ success: false, error: `格子标题不能超过 ${CELL_TITLE_MAX_LEN} 字符` })
-      return
-    }
-  }
-
-  // All cells must have content
-  const emptyCell = cells.find((c: any) => !c.title || !c.title.trim())
-  if (emptyCell) {
-    res.status(400).json({ success: false, error: '所有格子都必须填写词语' } as ApiResponse)
-    return
-  }
-
-  // Duplicate detection
-  const cellTitlesList = cells.map((c: any) => c.title.trim())
-  const seen = new Set<string>()
-  const duplicates: string[] = []
-  for (const t of cellTitlesList) {
-    if (seen.has(t)) duplicates.push(t)
-    else seen.add(t)
-  }
-  if (duplicates.length > 0) {
-    res.status(400).json({ success: false, error: `存在重复词语：${[...new Set(duplicates)].join('、')}` } as ApiResponse)
-    return
   }
 
   // category whitelist
@@ -436,7 +383,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 
   res.status(201).json({ success: true, data: template })
-})
+}))
 
 // ── POST /api/templates/:id/favorite - toggle favorite (auth required) ──
 router.post('/:id/favorite', authMiddleware, (req: AuthRequest, res: Response) => {
@@ -490,7 +437,7 @@ router.post('/:id/favorite', authMiddleware, (req: AuthRequest, res: Response) =
 })
 
 // ── POST /api/templates/:id/use - use template to create a board (auth required) ──
-router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/use', authMiddleware, asyncRoute(async (req: AuthRequest, res: Response) => {
   const db = getDb()
   const userId = req.user!.userId
   const templateId = parseInt(req.params.id as string)
@@ -583,14 +530,9 @@ router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) 
       try {
         if (existingIllust.get(cell.title, userId)) continue
         const ext = cell.image_path.split('.').pop() || 'jpg'
-        const destKey = `illustrations/u${userId}/${Date.now()}_${cell.position}.${ext}`
+        const destKey = `illustrations/u${userId}/${crypto.randomUUID()}.${ext}`
         await storage.copy(cell.image_path, destKey)
-        try {
-          insertIllust.run(cell.title, userId, destKey)
-        } catch (err) {
-          await storage.delete(destKey).catch(() => {})
-          throw err
-        }
+        insertIllust.run(cell.title, userId, destKey)
       } catch {
         // Non-critical: skip if copy fails
       }
@@ -629,7 +571,7 @@ router.post('/:id/use', authMiddleware, async (req: AuthRequest, res: Response) 
       })),
     },
   })
-})
+}))
 
 // ── DELETE /api/templates/:id - delete own template (auth required) ──
 router.delete('/:id', authMiddleware, (req: AuthRequest, res: Response) => {

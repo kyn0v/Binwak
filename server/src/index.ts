@@ -1,6 +1,7 @@
 import { config } from './config'
 import { closeDb } from './db/database'
 import { createApp } from './app'
+import { drainAsyncRoutes } from './middleware/asyncRoute'
 
 const app = createApp()
 
@@ -11,20 +12,29 @@ const server = app.listen(config.port, host, () => {
   console.log(`[Server] Environment: ${config.nodeEnv}`)
 })
 
-// Graceful shutdown
-process.on('SIGINT', () => {
+let shutdownStarted = false
+function shutdown(): void {
+  if (shutdownStarted) return
+  shutdownStarted = true
   console.log('\n[Server] Shutting down...')
-  closeDb()
+  let timedOut = false
+  const deadline = setTimeout(() => {
+    timedOut = true
+    console.error('[Server] Shutdown exceeded 30 seconds; forcing exit')
+    server.closeAllConnections()
+    process.exit(1)
+  }, 30_000)
   server.close(() => {
-    process.exit(0)
+    void drainAsyncRoutes().then(() => {
+      if (timedOut) return
+      clearTimeout(deadline)
+      closeDb()
+      process.exit(0)
+    })
   })
-})
+}
 
-process.on('SIGTERM', () => {
-  closeDb()
-  server.close(() => {
-    process.exit(0)
-  })
-})
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
 
 export default app

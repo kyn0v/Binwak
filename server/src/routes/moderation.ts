@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { authMiddleware } from '../middleware/auth'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { checkText } from '../services/moderation'
 
 const router = Router()
@@ -14,7 +15,7 @@ router.use(authMiddleware)
  */
 const TEXT_MAX_LEN = 2500 // WeChat msg_sec_check upper bound
 
-router.post('/check', async (req: Request, res: Response): Promise<void> => {
+router.post('/check', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const { text } = req.body as { text?: unknown }
 
   if (typeof text !== 'string') {
@@ -44,6 +45,6 @@ router.post('/check', async (req: Request, res: Response): Promise<void> => {
   }
 
   res.json({ success: true, data: { pass: true } })
-})
+}))
 
 export default router
