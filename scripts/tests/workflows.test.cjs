@@ -27,6 +27,7 @@ test('PR checks cover deployment, scripts, workflows and runtime changes', () =>
   for (const file of ['client', 'server']) {
     const workflow = read(`.github/workflows/${file}.yml`)
     const pr = workflow.split('  pull_request:')[1].split('  workflow_dispatch:')[0]
+    assert.doesNotMatch(pr, /^\s+branches(?:-ignore)?:/m, 'stacked PRs must receive the same checks as main PRs')
     for (const glob of ['scripts/**', '.github/workflows/**', 'package.json', '.nvmrc']) {
       assert.ok(pr.includes(`'${glob}'`), `${file} checks ${glob} PRs`)
     }
