@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { authMiddleware } from '../middleware/auth'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { checkText } from '../services/moderation'
 import { getStorage, validateStorageKey } from '../services/storage'
 import { config } from '../config'
@@ -39,7 +40,7 @@ function validateFeedbackImageKeys(images: unknown, userId: number): { imageList
   return { imageList }
 }
 
-router.post('/', authMiddleware, async (req: Request, res: Response) => {
+router.post('/', authMiddleware, asyncRoute(async (req: Request, res: Response) => {
   const { type, title, content, images } = req.body as CreateFeedbackRequest
 
   if (!type || !VALID_TYPES.has(type)) {
@@ -131,9 +132,9 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     success: true,
     data: { issueUrl: issue.html_url, issueNumber: issue.number },
   })
-})
+}))
 
-router.get('/mine', authMiddleware, async (req: Request, res: Response) => {
+router.get('/mine', authMiddleware, asyncRoute(async (req: Request, res: Response) => {
   const { token, repo } = config.github
   if (!token || !repo) {
     res.status(500).json({ success: false, error: '服务器未配置 GitHub 反馈仓库' })
@@ -173,6 +174,6 @@ router.get('/mine', authMiddleware, async (req: Request, res: Response) => {
   }))
 
   res.json({ success: true, data: { issues } })
-})
+}))
 
 export default router

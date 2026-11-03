@@ -91,7 +91,7 @@ class LocalDriver implements StorageDriver {
       return // Silently drop malformed keys rather than touch the filesystem
     }
     const filePath = path.join(config.storage.localDir, key)
-    fs.unlink(filePath, () => {}) // async, ignore errors
+    await fs.promises.unlink(filePath).catch(() => {})
   }
 
   async copy(srcKey: string, destKey: string): Promise<void> {

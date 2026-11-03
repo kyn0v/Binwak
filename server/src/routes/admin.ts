@@ -11,7 +11,8 @@ import { ensureSystemAdminUser, getDb } from '../db/database'
 import { getStorage } from '../services/storage'
 import { config } from '../config'
 import { prepareImageForStorage, cleanupFiles } from '../services/imageProcessing'
-import { imageMulter, upsertIllustration, deleteStorageObjectQuietly } from '../services/imageUpload'
+import { imageMulter, upsertIllustration } from '../services/imageUpload'
+import { parseGeneratedTemplate, parseTemplateCreate, parseTemplateUpdate } from '../utils/writeValidation'
 import {
   adminAuthMiddleware,
   getAdminCredentials,
@@ -20,13 +21,14 @@ import {
 } from '../middleware/adminAuth'
 import type { ApiResponse } from '../../../shared/types'
 import { validateIdParam } from '../middleware/validate'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { validateWebhookUrl } from '../utils/urlSafety'
 import { copyIllustrationsToTemplate } from '../services/templateSnapshot'
 
 const router = Router()
 
 // ── POST /api/admin/login ──
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const { username, password } = req.body as { username?: string; password?: string }
   const creds = getAdminCredentials()
 
@@ -55,7 +57,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   const token = generateAdminToken(username)
   res.json({ success: true, data: { token } } as ApiResponse)
-})
+}))
 
 // All routes below require admin auth
 router.use(adminAuthMiddleware)
@@ -556,7 +558,14 @@ router.post('/wordbank/batch', (req: Request, res: Response): void => {
 })
 
 // POST /api/admin/templates/generate - Generate template from word bank
-router.post('/templates/generate', async (req: Request, res: Response): Promise<void> => {
+router.post('/templates/generate', asyncRoute(async (req: Request, res: Response): Promise<void> => {
+  const parsed = parseGeneratedTemplate(req.body)
+  if (!parsed.ok) {
+    res.status(400).json({ success: false, error: parsed.error } as ApiResponse)
+    return
+  }
+  const { title, description, category, cells } = parsed.value
+  const words = cells.map(cell => cell.title)
   const adminUserId = getAdminUserId()
   if (!adminUserId) {
     res.status(500).json({ success: false, error: '系统用户初始化失败' } as ApiResponse)
@@ -564,29 +573,6 @@ router.post('/templates/generate', async (req: Request, res: Response): Promise<
   }
 
   const db = getDb()
-  const { title, description, words, category } = req.body as {
-    title?: string
-    description?: string
-    words?: string[]
-    category?: string
-  }
-
-  if (!title || !title.trim()) {
-    res.status(400).json({ success: false, error: '标题不能为空' } as ApiResponse)
-    return
-  }
-
-  if (!words || !Array.isArray(words) || words.length !== 25) {
-    res.status(400).json({ success: false, error: '必须选择 25 个词语' } as ApiResponse)
-    return
-  }
-
-  const uniqueWords = new Set(words.map(w => w.trim()))
-  if (uniqueWords.size !== 25) {
-    res.status(400).json({ success: false, error: '存在重复词语' } as ApiResponse)
-    return
-  }
-
   const validCategory = category || 'creative'
 
   const insertTemplate = db.prepare(`
@@ -616,37 +602,24 @@ router.post('/templates/generate', async (req: Request, res: Response): Promise<
   await copyIllustrationsToTemplate(db, templateId, adminUserId, words.map(w => w.trim()))
 
   res.json({ success: true, data: { templateId } } as ApiResponse)
-})
+}))
 
 // ── PUT /api/admin/templates/:id ── Update template content
-router.put('/templates/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/templates/:id', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
   const id = parseInt(req.params.id as string)
-  const { title, description, category, cells } = req.body as {
-    title?: string
-    description?: string
-    category?: string
-    cells?: Array<{ position: number; title: string }>
-  }
-
-  const tpl = db.prepare('SELECT id, grid_size FROM templates WHERE id = ?').get(id) as any
+  const tpl = db.prepare('SELECT id, grid_size FROM templates WHERE id = ?').get(id) as { id: number; grid_size: number } | undefined
   if (!tpl) {
     res.status(404).json({ success: false, error: '模板不存在' } as ApiResponse)
     return
   }
 
-  if (title !== undefined && !title.trim()) {
-    res.status(400).json({ success: false, error: '标题不能为空' } as ApiResponse)
+  const parsed = parseTemplateUpdate(req.body, tpl.grid_size)
+  if (!parsed.ok) {
+    res.status(400).json({ success: false, error: parsed.error } as ApiResponse)
     return
   }
-
-  let oldSnapshotKeys: string[] = []
-  if (cells && Array.isArray(cells)) {
-    const rows = db.prepare(
-      "SELECT image_path FROM template_cells WHERE template_id = ? AND image_path != ''"
-    ).all(id) as Array<{ image_path: string }>
-    oldSnapshotKeys = [...new Set(rows.map(r => r.image_path).filter(Boolean))]
-  }
+  const { title, description, category, cells } = parsed.value
 
   const transaction = db.transaction(() => {
     if (title !== undefined) {
@@ -658,7 +631,7 @@ router.put('/templates/:id', async (req: Request, res: Response): Promise<void> 
     if (category !== undefined) {
       db.prepare('UPDATE templates SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(category, id)
     }
-    if (cells && Array.isArray(cells)) {
+    if (cells !== undefined) {
       db.prepare('DELETE FROM template_cells WHERE template_id = ?').run(id)
       const insertCell = db.prepare('INSERT INTO template_cells (template_id, position, title) VALUES (?, ?, ?)')
       for (const cell of cells) {
@@ -669,23 +642,19 @@ router.put('/templates/:id', async (req: Request, res: Response): Promise<void> 
 
   transaction()
 
-  if (cells && Array.isArray(cells)) {
+  if (cells !== undefined) {
     const adminUserId = getAdminUserId()
     if (!adminUserId) {
       res.status(500).json({ success: false, error: '系统用户初始化失败' } as ApiResponse)
       return
     }
-    const storage = getStorage()
-    for (const key of oldSnapshotKeys) {
-      await storage.delete(key).catch(() => {})
-    }
-    await copyIllustrationsToTemplate(db, id, adminUserId, cells.map(c => c.title?.trim() || ''))
+    await copyIllustrationsToTemplate(db, id, adminUserId, cells.map(c => c.title))
   }
   res.json({ success: true, data: { id } } as ApiResponse)
-})
+}))
 
 // ── DELETE /api/admin/templates/:id ── Hard delete template
-router.delete('/templates/:id', async (req: Request, res: Response): Promise<void> => {
+router.delete('/templates/:id', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
   const id = parseInt(req.params.id as string)
 
@@ -695,11 +664,6 @@ router.delete('/templates/:id', async (req: Request, res: Response): Promise<voi
     return
   }
 
-  const snapshotRows = db.prepare(
-    "SELECT image_path FROM template_cells WHERE template_id = ? AND image_path != ''"
-  ).all(id) as Array<{ image_path: string }>
-  const snapshotKeys = [...new Set(snapshotRows.map(r => r.image_path).filter(Boolean))]
-
   const transaction = db.transaction(() => {
     db.prepare('DELETE FROM template_cells WHERE template_id = ?').run(id)
     db.prepare('DELETE FROM template_favorites WHERE template_id = ?').run(id)
@@ -708,15 +672,17 @@ router.delete('/templates/:id', async (req: Request, res: Response): Promise<voi
   })
 
   transaction()
-  const storage = getStorage()
-  for (const key of snapshotKeys) {
-    await storage.delete(key).catch(() => {})
-  }
   res.json({ success: true } as ApiResponse)
-})
+}))
 
 // ── POST /api/admin/templates ── Create template as admin
-router.post('/templates', async (req: Request, res: Response): Promise<void> => {
+router.post('/templates', asyncRoute(async (req: Request, res: Response): Promise<void> => {
+  const parsed = parseTemplateCreate(req.body)
+  if (!parsed.ok) {
+    res.status(400).json({ success: false, error: parsed.error } as ApiResponse)
+    return
+  }
+  const { title, description, gridSize, cells, category } = parsed.value
   const adminUserId = getAdminUserId()
   if (!adminUserId) {
     res.status(500).json({ success: false, error: '系统用户初始化失败' } as ApiResponse)
@@ -724,22 +690,6 @@ router.post('/templates', async (req: Request, res: Response): Promise<void> => 
   }
 
   const db = getDb()
-  const { title, description, gridSize, cells, category } = req.body
-
-  if (!title || typeof title !== 'string' || !title.trim()) {
-    res.status(400).json({ success: false, error: '标题不能为空' } as ApiResponse)
-    return
-  }
-  if (!gridSize || gridSize < 3 || gridSize > 6) {
-    res.status(400).json({ success: false, error: 'gridSize 必须在 3~6 之间' } as ApiResponse)
-    return
-  }
-  const expectedCells = gridSize * gridSize
-  if (!cells || !Array.isArray(cells) || cells.length !== expectedCells) {
-    res.status(400).json({ success: false, error: `cells 数量必须等于 ${expectedCells}` } as ApiResponse)
-    return
-  }
-
   let templateId: number
   const create = db.transaction(() => {
     const result = db.prepare(
@@ -766,17 +716,17 @@ router.post('/templates', async (req: Request, res: Response): Promise<void> => 
     if (result.changes > 0) nextOrder++
   }
 
-  await copyIllustrationsToTemplate(db, templateId!, adminUserId, cells.map((c: any) => c.title?.trim() || ''))
+  await copyIllustrationsToTemplate(db, templateId!, adminUserId, cells.map(c => c.title))
 
   res.status(201).json({ success: true, data: { id: templateId!, title: title.trim() } } as ApiResponse)
-})
+}))
 
 // ── Admin illustration upload ──
 
 const illustUpload = imageMulter({ maxBytes: 5 * 1024 * 1024 })
 
 // POST /api/admin/wordbank/:wordId/illustration - upload illustration for a word
-router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const adminUserId = getAdminUserId()
   if (!adminUserId) {
     res.status(500).json({ success: false, error: '系统用户初始化失败' } as ApiResponse)
@@ -819,24 +769,17 @@ router.post('/wordbank/:wordId/illustration', illustUpload.single('image'), asyn
 
   await cleanupFiles(preparedImage.cleanupPaths)
 
-  // Replace DB reference first; delete the old object only after the DB update.
-  let previousKey: string | null
   try {
-    ;({ previousKey } = upsertIllustration(db, wordRow.word, adminUserId, illustKey))
+    upsertIllustration(db, wordRow.word, adminUserId, illustKey)
   } catch (err) {
-    await deleteStorageObjectQuietly(storageDriver, illustKey)
     console.error('[Admin] Illustration DB save error:', err)
     res.status(500).json({ success: false, error: '保存插画记录失败' } as ApiResponse)
     return
   }
 
-  if (previousKey) {
-    await deleteStorageObjectQuietly(storageDriver, previousKey)
-  }
-
   const url = storageDriver.getImageUrl(illustKey)
   res.json({ success: true, data: { illustrationUrl: url } } as ApiResponse)
-})
+}))
 
 // ══════════════════════════════════════════════════════
 // Webhook management (for Agent / Bot integration)

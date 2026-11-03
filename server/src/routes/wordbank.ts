@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { getDb } from '../db/database'
 import { authMiddleware } from '../middleware/auth'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { checkText } from '../services/moderation'
 import { validateIdParam, WORD_MAX_LEN } from '../middleware/validate'
 import type {
@@ -40,7 +41,7 @@ router.get('/', (req: Request, res: Response): void => {
 /**
  * POST /api/wordbank
  */
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
   const userId = req.user!.userId
   const { word } = req.body as { word: string }
@@ -95,13 +96,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       throw err
     }
   }
-})
+}))
 
 /**
  * POST /api/wordbank/batch
  * Bulk replace word bank
  */
-router.post('/batch', async (req: Request, res: Response): Promise<void> => {
+router.post('/batch', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const db = getDb()
   const userId = req.user!.userId
   const { words } = req.body as UpdateWordBankRequest
@@ -167,7 +168,7 @@ router.post('/batch', async (req: Request, res: Response): Promise<void> => {
   }))
 
   res.json({ success: true, data: { words: updatedWords } } as ApiResponse)
-})
+}))
 
 /**
  * DELETE /api/wordbank/:id

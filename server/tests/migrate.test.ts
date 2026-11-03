@@ -68,6 +68,31 @@ describe('migration runner', () => {
     expect(applied.map((r) => r.version)).toContain('0001_add_user_and_template_columns')
   })
 
+  it.each([
+    ["ALTER TABLE users ADD COLUMN kind TEXT NOT NULL DEFAULT 'wechat'"],
+    ["ALTER TABLE users ADD COLUMN image_storage TEXT NOT NULL DEFAULT 'local'"],
+    ["ALTER TABLE template_cells ADD COLUMN image_path TEXT DEFAULT ''"],
+    ["ALTER TABLE users ADD COLUMN kind TEXT NOT NULL DEFAULT 'wechat'", "ALTER TABLE users ADD COLUMN image_storage TEXT NOT NULL DEFAULT 'local'"],
+  ])('rejects partial legacy columns without marking applied or altering tables (%j)', (...statements) => {
+    const db = freshDb()
+    for (const sql of statements) db.exec(sql)
+    const before = db.prepare("SELECT sql FROM sqlite_master WHERE name IN ('users', 'template_cells') ORDER BY name").all()
+    expect(() => runMigrations(db)).toThrow(/partial legacy.*0001/i)
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([])
+    expect(db.prepare("SELECT sql FROM sqlite_master WHERE name IN ('users', 'template_cells') ORDER BY name").all()).toEqual(before)
+    db.close()
+  })
+
+  it('rejects a complete legacy column set with incompatible type/default/nullability', () => {
+    const db = freshDb()
+    db.exec("ALTER TABLE users ADD COLUMN kind INTEGER DEFAULT 0")
+    db.exec("ALTER TABLE users ADD COLUMN image_storage TEXT NOT NULL DEFAULT 'local'")
+    db.exec("ALTER TABLE template_cells ADD COLUMN image_path TEXT DEFAULT ''")
+    expect(() => runMigrations(db)).toThrow(/legacy.*0001/i)
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([])
+    db.close()
+  })
+
   it('records the migration so it is skipped next run', () => {
     const db = freshDb()
     runMigrations(db)
