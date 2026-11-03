@@ -12,7 +12,6 @@ on:
       - 'package.json'
       - '.nvmrc'
   pull_request:
-    branches: [main]
     paths:
       - 'client/**'
       - 'tools/wechat-upload/**'
