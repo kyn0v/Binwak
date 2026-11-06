@@ -3,10 +3,12 @@ import path from 'path'
 import { config } from '../config'
 import { getDb } from '../db/database'
 import { authMiddleware } from '../middleware/auth'
+import { asyncRoute } from '../middleware/asyncRoute'
 import { getStorage, validateStorageKey } from '../services/storage'
 import { checkImage, checkImageSync } from '../services/moderation'
 import { prepareImageForStorage, cleanupFiles } from '../services/imageProcessing'
 import { imageMulter } from '../services/imageUpload'
+import { deleteUnreferencedMedia } from '../services/mediaReferences'
 import type { UploadResponse, ApiResponse } from '../../../shared/types'
 
 const router = Router()
@@ -17,7 +19,7 @@ router.use(authMiddleware)
 // Returns a time-limited signed URL for private OSS object access.
 // Only allows access to keys within the caller's own user namespace,
 // to prevent leaking other users' object existence.
-router.get('/presigned', async (req: Request, res: Response): Promise<void> => {
+router.get('/presigned', asyncRoute(async (req: Request, res: Response): Promise<void> => {
   const key = req.query.key as string
   if (!key) {
     res.status(400).json({ success: false, error: '缺少 key 参数' } as ApiResponse)
@@ -42,7 +44,7 @@ router.get('/presigned', async (req: Request, res: Response): Promise<void> => {
   const storageDriver = getStorage()
   const url = storageDriver.getImageUrl(key)
   res.json({ success: true, data: { url } } as ApiResponse<{ url: string }>)
-})
+}))
 
 // Multer storage (always save locally first; OSS mode uploads then deletes local)
 const upload = imageMulter({ maxBytes: 10 * 1024 * 1024 })
@@ -55,7 +57,7 @@ const upload = imageMulter({ maxBytes: 10 * 1024 * 1024 })
  * - boardId: board ID
  * - position: cell position
  */
-router.post('/', upload.single('image'), async (req: Request, res: Response): Promise<void> => {
+router.post('/', upload.single('image'), asyncRoute(async (req: Request, res: Response): Promise<void> => {
   if (!req.file) {
     res.status(400).json({ success: false, error: '没有上传文件' } as ApiResponse)
     return
@@ -108,9 +110,8 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
   // resolves against a private bucket.
   const url = storageDriver.getImageUrl(key)
 
-  /** Helper: delete uploaded file on failure */
   const removeUploadedFile = async () => {
-    await storageDriver.delete(key)
+    await deleteUnreferencedMedia(getDb(), storageDriver, key)
   }
 
   // If boardId and position provided, update cell automatically
@@ -160,7 +161,7 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
     }
 
     if (oldCell?.image_name) {
-      await storageDriver.delete(oldCell.image_name).catch(() => {})
+      await deleteUnreferencedMedia(db, storageDriver, oldCell.image_name)
     }
   }
 
@@ -174,6 +175,6 @@ router.post('/', upload.single('image'), async (req: Request, res: Response): Pr
     data: { fileName: key, url },
   }
   res.json(response)
-})
+}))
 
 export default router
