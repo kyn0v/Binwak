@@ -9,7 +9,7 @@ if [[ "$EUID" != 0 ]]; then
   printf '%s\n' '[runtime-upgrade] STOP ROOT_REQUIRED' >&2
   exit 2
 fi
-if [[ "${BINWAK_REVIEWED_PAYLOAD_SHA256:-}" != 'd3b0af56a24943db72c9fbd5a6903ac69a5d036b3f7edf27811e6096550fc1d2' ]]; then
+if [[ "${BINWAK_REVIEWED_PAYLOAD_SHA256:-}" != '314e95df0a412f24abc395a8907d63d7385ba6b7b9dae2c80e4a5f7e479b79f7' ]]; then
   printf '%s\n' '[runtime-upgrade] STOP EXACT_PAYLOAD_REVIEW_REQUIRED' >&2
   exit 2
 fi
@@ -249,10 +249,12 @@ function makeDriver(app, root) {
   const daemonPid = fs.readFileSync(pidFile, 'utf8').trim()
   guard(/^\d+$/.test(daemonPid), 'INVALID_DAEMON_PID')
   const daemonIdentity = fs.readFileSync(`/proc/${daemonPid}/stat`, 'utf8').split(') ')[1].split(' ')[19]
+  const daemonExecutable = fs.readlinkSync(`/proc/${daemonPid}/exe`)
+  guard(daemonExecutable.replace(/ \(deleted\)$/, '') === OLD_NODE, 'UNREVIEWED_DAEMON_EXECUTABLE')
   function assertHost() {
-    if (state?.daemonPid) guard(state.daemonPid === daemonPid && state.daemonIdentity === daemonIdentity, 'PM2_DAEMON_CHANGED')
+    if (state?.daemonPid) guard(state.daemonPid === daemonPid && state.daemonIdentity === daemonIdentity && state.daemonExecutable === daemonExecutable, 'PM2_DAEMON_CHANGED')
     guard(fs.readFileSync(pidFile, 'utf8').trim() === daemonPid && exists(socket), 'PM2_DAEMON_CHANGED')
-    guard(fs.realpathSync(`/proc/${daemonPid}/exe`) === OLD_NODE && fs.readFileSync(`/proc/${daemonPid}/stat`, 'utf8').split(') ')[1].split(' ')[19] === daemonIdentity, 'PM2_DAEMON_CHANGED')
+    guard(fs.readlinkSync(`/proc/${daemonPid}/exe`) === daemonExecutable && fs.readFileSync(`/proc/${daemonPid}/stat`, 'utf8').split(') ')[1].split(' ')[19] === daemonIdentity, 'PM2_DAEMON_CHANGED')
     guard(run('/usr/bin/which', ['node']) === OLD_NODE && run(OLD_NODE, ['--version']) === 'v20.20.2', 'DEFAULT_NODE20_CHANGED')
     for (const file of ['node', 'npm', 'npx']) guard(!exists(`/usr/local/bin/${file}`), 'GLOBAL_ALIAS_CHANGED')
   }
@@ -420,7 +422,7 @@ function makeDriver(app, root) {
     guard(Number(statfs.bavail) * Number(statfs.bsize) > Math.max(4 * 1024 ** 3, bytes(path.join(app, 'node_modules')) * 3 + bytes(path.join(app, 'uploads')) * 2 + bytes(dbPath) * 3 + 512 * 1024 ** 2), 'INSUFFICIENT_DISK_SPACE')
     const attempt = fs.mkdtempSync(path.join(root, 'attempt-'))
     state = { app, root, attempt, phase: 'preparing', fingerprint: baseline, peers: peerSnapshot(processes()),
-      savedPeers: savedRows.filter(entry => entry.name !== NAME), pm2Id: initial.pm_id, daemonPid, daemonIdentity,
+      savedPeers: savedRows.filter(entry => entry.name !== NAME), pm2Id: initial.pm_id, daemonPid, daemonIdentity, daemonExecutable,
       originalInterpreter: initial.pm2_env.exec_interpreter, originalTimeout: initial.pm2_env.kill_timeout ?? null,
       originalConfiguration: configurationHash(initial.pm2_env),
       savedOriginal: { exec_interpreter: saved[0].exec_interpreter, kill_timeout: saved[0].kill_timeout ?? null } }
