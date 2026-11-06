@@ -100,6 +100,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: deploy-bundle
+          path: server
 
       - name: Setup SSH
         uses: ./.github/actions/setup-ssh

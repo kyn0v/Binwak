@@ -40,6 +40,18 @@ test('PR checks cover deployment, scripts, workflows and runtime changes', () =>
   assert.match(read('.github/workflows/server.yml'), /run: npm run test:ops/)
 })
 
+test('server artifacts are extracted into the directory consumed by deployment', () => {
+  const workflow = read('.github/workflows/server.yml')
+  const download = workflow.split('uses: actions/download-artifact@v4')[1].split('      - name:')[0]
+  const destination = download.match(/^\s+path:\s+([^\n]+)$/m)?.[1].trim() || '.'
+  const upload = runBlock(workflow, 'Upload new build to staging area')
+  for (const entry of ['dist/', 'package.json', 'package-lock.json']) {
+    const source = `server/${entry}`
+    assert.ok(upload.includes(source), `deployment consumes ${source}`)
+    assert.equal(path.posix.join(destination, entry), source, `downloaded ${entry} reaches the deployment source`)
+  }
+})
+
 test('runtime declarations agree with release preflight and supported Node 26', () => {
   assert.equal(read('.nvmrc').trim(), '26')
   assert.equal(JSON.parse(read('package.json')).engines.node, '>=26 <27')
