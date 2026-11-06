@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app'
 import { createTestUser, authHeader } from './helpers'
 import { ensureSystemAdminUser, getDb } from '../src/db/database'
+
+vi.mock('../src/services/moderation', () => ({
+  checkText: vi.fn().mockResolvedValue({ pass: true, suggest: 'pass', label: 100 }),
+}))
 
 const app = createApp()
 

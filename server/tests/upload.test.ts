@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
-import path from 'path'
-import fs from 'fs'
 import { createApp } from '../src/app'
 import { createTestUser, authHeader } from './helpers'
+
+vi.mock('../src/services/moderation', () => ({
+  checkImageSync: vi.fn().mockResolvedValue({ pass: true, suggest: 'pass', label: 100 }),
+  checkImage: vi.fn().mockResolvedValue({ submitted: true, traceId: 'test-trace' }),
+}))
 
 const app = createApp()
 
@@ -18,23 +21,12 @@ const TINY_JPEG = Buffer.from(
   'base64'
 )
 
-const TEST_IMAGE_PATH = path.resolve(__dirname, 'test-image.jpg')
-
 describe('Upload API', () => {
-  // Create a temporary test image.
-  beforeAll(() => {
-    fs.writeFileSync(TEST_IMAGE_PATH, TINY_JPEG)
-  })
-
-  afterAll(() => {
-    // Clean up the test image.
-    try { fs.unlinkSync(TEST_IMAGE_PATH) } catch {}
-  })
 
   it('rejects request without auth', async () => {
     const res = await request(app)
       .post('/api/upload')
-      .attach('image', TEST_IMAGE_PATH)
+      .attach('image', TINY_JPEG, 'test-image.jpg')
 
     expect(res.status).toBe(401)
   })
@@ -44,7 +36,7 @@ describe('Upload API', () => {
     const res = await request(app)
       .post('/api/upload')
       .set('Authorization', authHeader(token))
-      .attach('image', TEST_IMAGE_PATH)
+      .attach('image', TINY_JPEG, 'test-image.jpg')
 
     expect(res.status).toBe(200)
     expect(res.body.success).toBe(true)
@@ -52,9 +44,6 @@ describe('Upload API', () => {
     expect(res.body.data.url).toMatch(/^\/uploads\//)
     expect(res.body.data.url).toBe(`/uploads/${res.body.data.fileName}`)
 
-    // Clean up uploaded file — key now includes subdirectories
-    const uploadedPath = path.resolve(__dirname, '..', 'uploads', res.body.data.fileName)
-    try { fs.unlinkSync(uploadedPath) } catch {}
   })
 
   it('uploads image and auto-completes cell when boardId + position given', async () => {
@@ -73,7 +62,7 @@ describe('Upload API', () => {
       .set('Authorization', authHeader(token))
       .field('boardId', String(boardId))
       .field('position', '0')
-      .attach('image', TEST_IMAGE_PATH)
+      .attach('image', TINY_JPEG, 'test-image.jpg')
 
     expect(res.status).toBe(200)
 
@@ -87,9 +76,6 @@ describe('Upload API', () => {
     expect(cell.imageName).toBe(res.body.data.fileName)
     expect(cell.imageUrl).toBe(res.body.data.url)
 
-    // Clean up
-    const uploadedPath = path.resolve(__dirname, '..', 'uploads', res.body.data.fileName)
-    try { fs.unlinkSync(uploadedPath) } catch {}
   })
 
   it('returns 400 when no file is attached', async () => {
