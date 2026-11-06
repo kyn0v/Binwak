@@ -30,6 +30,20 @@ report.runtime = {
 }
 const pm2Home = process.env.PM2_HOME || path.join(process.env.HOME, '.pm2')
 const dumpPath = path.join(pm2Home, 'dump.pm2')
+const daemonPidFile = path.join(pm2Home, 'pm2.pid')
+if (fs.existsSync(daemonPidFile)) {
+  const pid = fs.readFileSync(daemonPidFile, 'utf8').trim()
+  if (/^\d+$/.test(pid)) {
+    try {
+      const executable = fs.readlinkSync(`/proc/${pid}/exe`)
+      report.daemon = {
+        pid: Number(pid),
+        executable,
+        node: path.basename(executable.replace(/ \(deleted\)$/, '')) === 'node' ? version(`/proc/${pid}/exe`) : 'unknown',
+      }
+    } catch { report.daemon = { pid: Number(pid), available: false } }
+  }
+}
 report.savedProcesses = fs.existsSync(dumpPath)
   ? JSON.parse(fs.readFileSync(dumpPath, 'utf8')).map(entry => ({
     name: entry.name,
