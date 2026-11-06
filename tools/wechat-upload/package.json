@@ -6,6 +6,6 @@
     "node": ">=26 <27"
   },
   "dependencies": {
-    "miniprogram-ci": "2.1.34"
+    "miniprogram-ci": "2.1.48"
   }
 }
