@@ -1,148 +1,45 @@
 name: Server
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'server/**'
-      - 'shared/**'
-      - 'deploy/**'
-      - 'scripts/**'
-      - '.github/workflows/server.yml'
-      - 'package.json'
-      - '.nvmrc'
-  pull_request:
-    paths:
-      - 'tools/wechat-upload/**'
-      - 'server/**'
-      - 'shared/**'
-      - 'deploy/**'
-      - 'scripts/**'
-      - '.github/workflows/**'
-      - 'package.json'
-      - '.nvmrc'
   workflow_dispatch:
 
-concurrency:
-  group: server-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 jobs:
-  build:
+  inspect:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: npm
-          cache-dependency-path: |
-            server/package-lock.json
-
-      - name: Install server dependencies
-        run: npm ci --prefix server
-
-      - name: Operations safety tests
-        run: npm run test:ops
-
-      - name: Type check
-        run: cd server && npx tsc --noEmit
-
-      - name: Run tests
-        run: npm --prefix server run test
-
-      - name: Build server
-        run: npm --prefix server run build
-
-      # Build once, deploy the same artifacts — guarantees "what was tested is
-      # what gets shipped" and avoids rebuilding in the deploy job.
-      - name: Upload deploy artifacts
-        if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
-        with:
-          name: deploy-bundle
-          retention-days: 7
-          if-no-files-found: error
-          path: |
-            server/dist/
-            server/package.json
-            server/package-lock.json
-
-  deploy:
-    if: github.event_name == 'push'
-    needs: build
-    runs-on: ubuntu-latest
-    env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-      DEPLOY_SERVER_PATH: ${{ secrets.DEPLOY_SERVER_PATH }}
-      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate required secrets
+      - name: Configure deployment SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          missing=0
-          for key in DEPLOY_HOST DEPLOY_USER DEPLOY_SERVER_PATH DEPLOY_SSH_PRIVATE_KEY; do
-            if [ -z "${!key:-}" ]; then
-              echo "::error::Missing required secret: $key"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then exit 1; fi
-
-      # Reuse the exact artifacts built and tested in the `build` job instead of
-      # rebuilding here (build-once / deploy-the-same-artifact).
-      - name: Download deploy artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: deploy-bundle
-
-      - name: Setup SSH
-        uses: ./.github/actions/setup-ssh
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          user: ${{ secrets.DEPLOY_USER }}
-          port: ${{ secrets.DEPLOY_PORT }}
-          private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-
-      - name: Upload new build to staging area
+          PORT="${DEPLOY_PORT:-22}"
+          [[ "$PORT" =~ ^[0-9]{1,5}$ ]]
+          (( 10#$PORT >= 1 && 10#$PORT <= 65535 ))
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]]
+          [[ -n "$SSH_PRIVATE_KEY" ]]
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Inspect production without deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SERVER_PATH: ${{ secrets.DEPLOY_SERVER_PATH }}
         run: |
           set -euo pipefail
-          # Stage the new build under .incoming/ on the server; release.sh will
-          # back up the current release and swap this in atomically with rollback.
-          INCOMING="${DEPLOY_SERVER_PATH}/.incoming"
-          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "rm -rf '${INCOMING}' && mkdir -p '${INCOMING}/dist'"
-
-          rsync -az --delete -e "ssh -p ${DEPLOY_PORT:-22}" \
-            server/dist/ \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${INCOMING}/dist/"
-
-          scp -P "${DEPLOY_PORT:-22}" \
-            server/package.json \
-            server/package-lock.json \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${INCOMING}/"
-
-          # Ship the release script and make it executable.
-          scp -P "${DEPLOY_PORT:-22}" \
-            deploy/release.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_SERVER_PATH}/release.sh"
-          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod +x '${DEPLOY_SERVER_PATH}/release.sh'"
-
-      - name: Release with auto-rollback
-        run: |
-          set -euo pipefail
-          # release.sh: backup current → swap in → install → restart → health
-          # check → auto-rollback on failure → prune to last 3 releases.
-          # data/, uploads/ and .env are never touched.
-          ssh -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "APP_PATH='${DEPLOY_SERVER_PATH}' \
-             HEALTH_URL='http://127.0.0.1:3000/api/health' \
-             PM2_NAME='binwak-api' \
-             KEEP=3 \
-             bash '${DEPLOY_SERVER_PATH}/release.sh'"
+          [[ "$DEPLOY_SERVER_PATH" =~ ^/[a-zA-Z0-9_./-]+$ && "$DEPLOY_SERVER_PATH" != / ]]
+          [[ "$DEPLOY_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ]]
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -p "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd '$DEPLOY_SERVER_PATH' && node -" < scripts/inspect-production.cjs
