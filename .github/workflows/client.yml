@@ -5,13 +5,21 @@ on:
     branches: [main]
     paths:
       - 'client/**'
+      - 'tools/wechat-upload/**'
       - 'shared/**'
+      - 'scripts/**'
       - '.github/workflows/client.yml'
+      - 'package.json'
+      - '.nvmrc'
   pull_request:
-    branches: [main]
     paths:
       - 'client/**'
+      - 'tools/wechat-upload/**'
       - 'shared/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - '.nvmrc'
   workflow_dispatch:
 
 concurrency:
@@ -26,18 +34,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: client/package-lock.json
 
       - name: Install dependencies
         run: npm ci --prefix client
 
+      - name: Type check
+        run: npm --prefix client run type-check
+
       - name: Run tests
         run: npm --prefix client run test
 
       - name: Build (mp-weixin)
-        run: cd client && npx uni build -p mp-weixin --mode production
+        env:
+          VITE_API_BASE_URL: ${{ github.event_name == 'pull_request' && 'https://api.example.invalid' || secrets.VITE_API_BASE_URL }}
+        run: bash scripts/build-client-production.sh
 
   deploy:
     if: github.event_name == 'push'
@@ -48,9 +61,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: client/package-lock.json
+
+      - name: Validate production API target
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: node scripts/validate-client-api.cjs
 
       - name: Install dependencies
         run: cd client && npm ci
@@ -68,10 +86,14 @@ jobs:
       - name: Build mp-weixin
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-        run: cd client && npx uni build -p mp-weixin --mode production
+        run: bash scripts/build-client-production.sh
 
-      - name: Install miniprogram-ci
-        run: cd client && npm install miniprogram-ci --no-save
+      - name: Install pinned upload tool outside the client dependency tree
+        run: |
+          mkdir -p "$RUNNER_TEMP/wechat-upload"
+          cp tools/wechat-upload/package.json tools/wechat-upload/package-lock.json "$RUNNER_TEMP/wechat-upload/"
+          npm ci --prefix "$RUNNER_TEMP/wechat-upload" --no-audit --no-fund
+          echo "NODE_PATH=$RUNNER_TEMP/wechat-upload/node_modules" >> "$GITHUB_ENV"
 
       - name: Upload to WeChat
         env:

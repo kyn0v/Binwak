@@ -1,0 +1,11 @@
+{
+  "name": "binwak-wechat-upload",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=26 <27"
+  },
+  "dependencies": {
+    "miniprogram-ci": "2.1.34"
+  }
+}

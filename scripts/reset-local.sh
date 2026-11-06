@@ -45,8 +45,8 @@ cat <<'EOF'
     In WeChat DevTools:  Tools → Clear cache → Clear all
     (check Data cache + File cache + Authorization), then DO NOT recompile yet.
 
-  This script will reset the server database. After it finishes, recompile
-  in DevTools to see the truly clean first-launch state.
+  Stop the backend and its watcher before continuing.
+  After the reset, restart the backend before recompiling in DevTools.
 
 EOF
 
@@ -58,19 +58,46 @@ if [[ "$ASSUME_YES" -ne 1 ]]; then
   esac
 fi
 
-# ── Step ②: reset the server database ────────────────────────────────────────
-# Deleting the file is cleaner than emptying tables: the backend recreates an
-# empty schema + applies migrations on next startup. Also remove the WAL/SHM
-# sidecar files so no committed-but-unmerged rows survive.
+if ! command -v lsof >/dev/null 2>&1; then
+  err "lsof is required to verify the backend is stopped. Nothing was removed."
+  exit 1
+fi
+
+require_unused() {
+  local holders status
+  if holders="$(lsof -t "$@" 2>&1)"; then
+    err "Backend or database is in use (PIDs: $holders). Stop it and its watcher, then retry."
+    exit 1
+  else
+    status=$?
+    if [[ "$status" -ne 1 || -n "$holders" ]]; then
+      err "Cannot verify stopped backend: $holders. Nothing was removed."
+      exit 1
+    fi
+  fi
+}
+
+require_unused -iTCP:3000 -sTCP:LISTEN
+require_unused -a -d cwd +d "$ROOT/server"
+DB_FILES=()
+for file in "$DB" "$DB-wal" "$DB-shm"; do
+  [[ ! -e "$file" ]] || DB_FILES+=("$file")
+done
+if [[ "${#DB_FILES[@]}" -gt 0 ]]; then
+  require_unused "${DB_FILES[@]}"
+fi
+
 if [[ -f "$DB" ]]; then
-  TS="$(date +%Y%m%d-%H%M%S)"
-  BACKUP="$DB.backup-$TS"
-  cp "$DB" "$BACKUP"
-  log "Backed up current DB → $(basename "$BACKUP")"
+  BACKUP="$(mktemp "$DB.backup-$(date +%Y%m%d-%H%M%S)-XXXXXX")"
+  node "$ROOT/scripts/backup-local-db.cjs" "$DB" "$BACKUP"
+  log "SQLite-consistent backup saved at $BACKUP"
+  require_unused -iTCP:3000 -sTCP:LISTEN
+  require_unused -a -d cwd +d "$ROOT/server"
+  require_unused "$DB"
   rm -f "$DB" "$DB-wal" "$DB-shm"
   log "Removed server/data/bingo.db (+ WAL/SHM)."
 else
-  warn "No server/data/bingo.db found — nothing to remove (already clean)."
+  warn "No server/data/bingo.db found. Nothing was removed."
 fi
 
 cat <<'EOF'
@@ -78,9 +105,9 @@ cat <<'EOF'
   Server database reset.
 
   Next:
-    • If the backend (dev:local) is running, tsx watch will recreate an empty
-      DB automatically — no restart needed.
-    • In WeChat DevTools, recompile (Cmd/Ctrl + B).
+    • Restart the backend with npm run dev:local or npm run server:dev.
+      A fresh process creates the empty schema and applies migrations.
+    • Only then recompile in WeChat DevTools (Cmd/Ctrl + B).
 
   You should now see the clean first-launch state (empty ticks; the 25 default
   words come from the client's built-in DEFAULT_WORDS — that is expected).

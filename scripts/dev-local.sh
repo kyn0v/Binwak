@@ -8,12 +8,12 @@
 #   3. Temporarily injects your AppID into client/src/manifest.json so the
 #      generated WeChat project is associated with it (restored on exit).
 #   4. Starts the backend (tsx watch, :3000).
-#   5. Starts the client watch build (uni -p mp-weixin -> dist/dev/mp-weixin).
-#   6. Opens WeChat DevTools on the built project for live debugging.
+#   5. Completes a local-target build into dist/dev/mp-weixin.
+#   6. Opens WeChat DevTools, then starts the client watch build.
 #
 # Usage:
 #   cp .env.local.example .env.local   # then fill in WX_APPID / WX_SECRET
-#   ./scripts/dev-local.sh             # add --install on first run to npm install
+#   ./scripts/dev-local.sh             # add --install on first run to npm ci
 #
 # Press Ctrl-C to stop everything; manifest.json is restored automatically.
 
@@ -34,6 +34,11 @@ if [[ ! -f .env.local ]]; then
 fi
 set -a; source .env.local; set +a
 
+# Exported values take precedence over Vite and dotenv files.
+export VITE_API_BASE_URL="http://127.0.0.1:3000"
+export PORT=3000
+log "Local API target forced to $VITE_API_BASE_URL"
+
 if [[ -z "${WX_APPID:-}" ]]; then
   err "WX_APPID is empty in .env.local"
   exit 1
@@ -42,15 +47,31 @@ if [[ -z "${WX_SECRET:-}" ]]; then
   warn "WX_SECRET is empty — login (code2session) will fail. Login-gated pages won't work."
 fi
 
+if ! command -v lsof >/dev/null 2>&1; then
+  err "lsof is required to verify local port 3000 is unused."
+  exit 1
+fi
+if listeners="$(lsof -t -iTCP:3000 -sTCP:LISTEN 2>&1)"; then
+  err "Port 3000 is already in use (PIDs: $listeners). Stop that service or tunnel first."
+  exit 1
+else
+  status=$?
+  if [[ "$status" -ne 1 || -n "$listeners" ]]; then
+    err "Cannot verify local port 3000: $listeners"
+    exit 1
+  fi
+fi
+
 DEVTOOLS_CLI="${WX_DEVTOOLS_CLI:-/Applications/wechatwebdevtools.app/Contents/MacOS/cli}"
 DEV_OUT="$ROOT/client/dist/dev/mp-weixin"
+export UNI_OUTPUT_DIR="$DEV_OUT"
 MANIFEST="$ROOT/client/src/manifest.json"
 
 # ── optional: install deps ───────────────────────────────────────────────────
 if [[ "${1:-}" == "--install" ]]; then
   log "Installing dependencies (client + server)…"
-  (cd client && npm install)
-  (cd server && npm install)
+  (cd client && npm ci)
+  (cd server && npm ci)
 fi
 
 # ── server/.env: create + inject WeChat creds ────────────────────────────────
@@ -104,19 +125,25 @@ log "Starting backend (server: tsx watch on :3000)…"
 (cd server && npm run dev) &
 PIDS+=("$!")
 
-# ── start client watch build ─────────────────────────────────────────────────
-log "Starting client watch build (mp-weixin → dist/dev/mp-weixin)…"
-(cd client && npm run dev:mp-weixin) &
-PIDS+=("$!")
-
-# ── wait for first build, then open DevTools ─────────────────────────────────
-log "Waiting for first client build…"
-for _ in $(seq 1 120); do
-  [[ -f "$DEV_OUT/app.json" ]] && break
+backend_ready=0
+for _ in $(seq 1 30); do
+  if curl --noproxy '*' -fsS --max-time 2 "$VITE_API_BASE_URL/api/health" >/dev/null; then
+    backend_ready=1
+    break
+  fi
   sleep 1
 done
+if [[ "$backend_ready" -ne 1 ]]; then
+  err "Local backend health check failed. Client build was not started."
+  exit 1
+fi
+
+# app.json can precede JavaScript emission or survive a failed watch build.
+# A finite build must succeed before DevTools can import this directory.
+log "Building local client before opening DevTools…"
+(cd client && npm run build:mp-weixin -- --mode development)
 if [[ ! -f "$DEV_OUT/app.json" ]]; then
-  err "Client build did not produce $DEV_OUT in time. Check the logs above."
+  err "Completed client build did not produce $DEV_OUT/app.json."
   exit 1
 fi
 log "Client build ready at $DEV_OUT"
@@ -130,6 +157,11 @@ else
   warn "Open DevTools manually and import: $DEV_OUT"
   warn "(Override path via WX_DEVTOOLS_CLI in .env.local.)"
 fi
+
+# Start the watcher after import so its initial writes cannot race DevTools open.
+log "Starting client watch build (mp-weixin → dist/dev/mp-weixin)…"
+(cd client && npm run dev:mp-weixin) &
+PIDS+=("$!")
 
 log "Backend: http://localhost:3000   |   Client watch: dist/dev/mp-weixin"
 log "In DevTools: Details → Local settings → check 'Do not verify domains' for localhost."

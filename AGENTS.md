@@ -16,7 +16,7 @@
 | 服务端 | Express, SQLite, TypeScript, tsx, Vitest |
 | 部署 | PM2, Nginx, rsync, GitHub Actions |
 
-环境要求：Node.js 20+；微信开发者工具（预览 `mp-weixin` 构建产物）。
+环境要求：Node.js 26（见 `.nvmrc`）；微信开发者工具（预览 `mp-weixin` 构建产物）。
 
 ## 目录结构
 
