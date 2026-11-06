@@ -18,6 +18,10 @@ if [[ ! "$KEEP" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
+if [[ -x "$APP_PATH/.runtime/node/bin/node" ]]; then
+  export PATH="$APP_PATH/.runtime/node/bin:$PATH"
+fi
+
 if [[ "$(node -p 'process.versions.node.split(".")[0]')" != 26 ]]; then
   log "ERROR: Node.js 26 is required, matching .nvmrc and CI; live files unchanged"
   exit 1
@@ -65,7 +69,7 @@ copy_release() {
 start_release() {
   # Functions called from an if/&& context cannot rely on Bash errexit.
   (cd "$APP_PATH" && npm ci --omit=dev --no-audit --no-fund) || return 1
-  pm2 restart "$PM2_NAME" --update-env --kill-timeout 35000 || return 1
+  pm2 restart "$PM2_NAME" --update-env --kill-timeout 35000 --interpreter "$(command -v node)" || return 1
   health_check
 }
 

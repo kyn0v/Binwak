@@ -128,6 +128,31 @@ test('release rejects an incompatible runtime before mutating live files', (t) =
   assert.doesNotMatch(f.trace(), /rsync |npm |pm2 |curl /)
 })
 
+test('release uses its private Node runtime without changing the host runtime', (t) => {
+  const f = releaseFixture(t)
+  f.stub('node', 'printf "20\\n"')
+  const hostNode = fs.readFileSync(path.join(f.dir, 'bin/node'))
+  const privateNode = path.join(f.dir, 'app/.runtime/node/bin/node')
+  fs.mkdirSync(path.dirname(privateNode), { recursive: true })
+  fs.symlinkSync(process.execPath, privateNode)
+  f.stub('npm', '[ "$(command -v node)" = "$APP_PATH/.runtime/node/bin/node" ]')
+  const result = f.run('deploy/release.sh')
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  assert.ok(f.trace().includes(`--interpreter ${privateNode}`), 'PM2 receives the verified private interpreter')
+  assert.deepEqual(fs.readFileSync(path.join(f.dir, 'bin/node')), hostNode)
+  assertStateUntouched(f)
+})
+
+test('release rejects an incompatible private runtime rather than using the host runtime', (t) => {
+  const f = releaseFixture(t)
+  const privateNode = f.write('app/.runtime/node/bin/node', '#!/bin/sh\nprintf "24\\n"\n')
+  fs.chmodSync(privateNode, 0o755)
+  const result = f.run('deploy/release.sh')
+  assert.equal(result.status, 1, result.stdout + result.stderr)
+  assert.equal(fs.readFileSync(path.join(f.dir, 'app/dist/version'), 'utf8'), 'old')
+  assert.doesNotMatch(f.trace(), /rsync |npm |pm2 |curl /)
+})
+
 test('PM2 initial start allows the full 30-second application drain plus margin', () => {
   const config = require(path.join(root, 'deploy/ecosystem.config.js'))
   const app = config.apps.find(app => app.name === 'binwak-api')
