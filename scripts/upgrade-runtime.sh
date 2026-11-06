@@ -9,7 +9,7 @@ if [[ "$EUID" != 0 ]]; then
   printf '%s\n' '[runtime-upgrade] STOP ROOT_REQUIRED' >&2
   exit 2
 fi
-if [[ "${BINWAK_REVIEWED_PAYLOAD_SHA256:-}" != 'a61b0efe2f4fa80c6eb8533ff6c9424dce8de4089c9c72e5295927575cef4fc4' ]]; then
+if [[ "${BINWAK_REVIEWED_PAYLOAD_SHA256:-}" != 'd3b0af56a24943db72c9fbd5a6903ac69a5d036b3f7edf27811e6096550fc1d2' ]]; then
   printf '%s\n' '[runtime-upgrade] STOP EXACT_PAYLOAD_REVIEW_REQUIRED' >&2
   exit 2
 fi
@@ -527,6 +527,11 @@ module.exports = { guard, exists, hash, writeJson, exchangeModules, restoreModul
 if (require.main === module) main().catch(error => {
   const code = /^[A-Z0-9_]+$/.test(error.message) ? error.message : 'UNEXPECTED_FAILURE_DETAILS_SUPPRESSED'
   console.error(`[runtime-upgrade] STOP ${code}`)
+  if (code === 'UNEXPECTED_FAILURE_DETAILS_SUPPRESSED') {
+    const kind = /^[A-Z0-9_]+$/.test(error.code || '') ? error.code : 'UNCLASSIFIED'
+    const line = /runtime-upgrade\.cjs:(\d+):\d+/.exec(error.stack || '')?.[1] || 'unknown'
+    console.error(`[runtime-upgrade] ERROR_SITE ${kind} line=${line}`)
+  }
   process.exitCode = 2
 })
 BINWAK_RUNTIME_JAVASCRIPT
