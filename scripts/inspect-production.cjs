@@ -16,6 +16,28 @@ function version(command) {
   catch { return 'unavailable' }
 }
 report.npm = version('npm')
+report.runtime = {
+  uid: process.getuid(),
+  executable: process.execPath,
+  searchPath: process.env.PATH,
+  home: process.env.HOME,
+  freeBytes: Number(fs.statfsSync(app).bavail) * Number(fs.statfsSync(app).bsize),
+  appOwner: fs.statSync(app).uid,
+  globalBin: ['/usr/local/bin/node', '/usr/local/bin/npm', '/usr/local/bin/npx'].map(file => ({
+    file,
+    exists: fs.existsSync(file),
+  })),
+}
+const pm2Home = process.env.PM2_HOME || path.join(process.env.HOME, '.pm2')
+const dumpPath = path.join(pm2Home, 'dump.pm2')
+report.savedProcesses = fs.existsSync(dumpPath)
+  ? JSON.parse(fs.readFileSync(dumpPath, 'utf8')).map(entry => ({
+    name: entry.name,
+    interpreter: entry.exec_interpreter,
+    script: entry.pm_exec_path,
+    cwd: entry.pm_cwd,
+  }))
+  : []
 report.pm2 = 'unavailable'
 for (const directory of (process.env.PATH || '').split(path.delimiter)) {
   try {
