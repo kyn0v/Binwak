@@ -42,4 +42,4 @@ jobs:
           [[ "$DEPLOY_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ]]
           ssh -o BatchMode=yes -o ConnectTimeout=15 -p "${DEPLOY_PORT:-22}" \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '$DEPLOY_SERVER_PATH' && ./.runtime/node/bin/node -" < scripts/inspect-production.cjs
+            "cd '$DEPLOY_SERVER_PATH' && ./.runtime/node/bin/node -" < scripts/inspect-nginx.cjs
