@@ -19,9 +19,9 @@
         <view class="board-name-row" @tap.stop="openBoardSwitcher">
           <text class="board-name">{{ boardTitle }}</text>
           <text class="board-name-arrow" :class="{ 'arrow-up': showBoardSwitcher }">▾</text>
-          <view v-if="!loggedIn && offlineReason" class="offline-badge" @tap.stop="showOfflineDetail">
+          <view v-if="offlineReason || lastSyncError" class="offline-badge" @tap.stop="showOfflineDetail">
             <text class="offline-icon">⚡</text>
-            <text class="offline-text">离线</text>
+            <text class="offline-text">{{ lastSyncError ? '待同步' : '离线' }}</text>
           </view>
           <!-- Board switcher dropdown -->
           <view v-if="showBoardSwitcher" class="board-dropdown" @tap.stop>
@@ -45,6 +45,12 @@
                   <text>{{ s }}×{{ s }}</text>
                 </view>
               </view>
+            </view>
+            <view v-if="recoveryAvailable" class="dropdown-board-item dropdown-action" @tap.stop="onRecoverLocal">
+              <text class="dropdown-action-text">恢复旧版本地卡片</text>
+            </view>
+            <view class="dropdown-board-item dropdown-action" @tap.stop="copyLocalBackup">
+              <text class="dropdown-action-text">复制恢复信息（不含照片）</text>
             </view>
             <!-- card actions -->
             <view class="dropdown-board-item dropdown-action dropdown-action-top" @tap.stop="onManualEdit">
@@ -102,7 +108,7 @@
           <view class="cell-media">
             <image
               v-if="cell.imagePath && !isEditMode"
-              :src="cellResolvedUrls[idx] || cell.imagePath"
+              :src="cell.imagePath"
               class="cell-photo"
               mode="aspectFill"
             />
@@ -257,7 +263,7 @@
           >
             <view class="polaroid-photo" :style="polaroidPhotoStyle">
               <image
-                :src="flippedCells[idx] ? cell.illustrationPath : (cellResolvedUrls[idx] || cell.imagePath)"
+                :src="flippedCells[idx] ? cell.illustrationPath : cell.imagePath"
                 class="polaroid-image"
                 mode="aspectFill"
               />
@@ -273,7 +279,7 @@
           <!-- Photo only: regular card -->
           <view v-else-if="cell.imagePath" class="polaroid-card">
             <view class="polaroid-photo" :style="polaroidPhotoStyle">
-              <image :src="cellResolvedUrls[idx] || cell.imagePath" class="polaroid-image" mode="aspectFill" />
+              <image :src="cell.imagePath" class="polaroid-image" mode="aspectFill" />
             </view>
             <view class="polaroid-footer">
               <text class="polaroid-title">{{ cell.title }}</text>
@@ -332,15 +338,14 @@ import MilestoneToast from './MilestoneToast.vue'
 const props = withDefaults(defineProps<{ capsuleTop?: number; capsuleRightRpx?: number }>(), { capsuleTop: 0, capsuleRightRpx: 24 })
 import { useBingoBoard, GRID_SIZE_OPTIONS } from './useBingoBoard'
 import { useWordBank } from './useWordBank'
-import { useTheme, THEMES } from './useTheme'
+import { useTheme } from './useTheme'
 import { buildShareCode, parseShareCode, copyShareCodeToClipboard } from './shareCode'
 import { chooseSquareImage, prepareImageForUpload, saveImage } from './imageTools'
 import { useCanvasExport, preWarmLocalPaths } from './useCanvasExport'
 import { useCardStyle } from './cardStyles'
 import { useAuth } from './useAuth'
-import { useSync, defaultBoardTitle } from './useSync'
-import { deleteBoard, resolveApiUrl, getProfile } from './api'
-import { usePrivateImage } from './usePrivateImage'
+import { useSync, defaultBoardTitle, type CellTarget } from './useSync'
+import { usePhotoPreference } from './usePhotoPreference'
 import { usePhotoNotice } from './usePhotoNotice'
 import { useIllustMode } from './useIllustMode'
 import { useWordPicker } from './useWordPicker'
@@ -349,7 +354,7 @@ import { useMilestoneToast } from './useMilestoneToast'
 import { getBoardState as boardStateOf } from './boardState'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
-import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
+import { safeGet, safeRemove } from '@/utils/safeStorage'
 
 // ── state ──
 const isLoading = ref(true)
@@ -358,8 +363,6 @@ const showSharePanel = ref(false)
 const shareCodeText = ref('')
 const importCodeText = ref('')
 const isActionSheetOpen = ref(false)
-// Resolved presigned URLs keyed by cell position
-const cellResolvedUrls = ref<Record<number, string>>({})
 const isPickingImage = ref(false)
 const cellPreviewIndex = ref(-1)
 
@@ -376,24 +379,29 @@ const {
 const currentPublishedTemplateId = ref<number | null>(null)
 
 const { loggedIn, offlineReason, ensureLoggedIn } = useAuth()
-const { resolveUrl: resolvePrivateUrl, prefetchUrls } = usePrivateImage()
+const { imageMode } = usePhotoPreference()
 const {
   syncing,
   lastSyncError,
   initialSync,
-  pushCells,
-  pushComplete,
-  pushWordBank,
+  retryPending,
+  captureCell,
+  targetCurrent,
+  editCell,
+  completePhoto,
+  editLocal,
+  captureSelection,
+  selectionCurrent,
+  recoveryAvailable,
+  importLocalRecovery,
+  exportLocalRecovery,
   fetchBoards,
   createAndSwitchBoard,
   remoteBoardId,
   getBoardSequenceNumber,
-  reloadActiveBoard,
-  renameBoard,
-  removeBoard,
 } = useSync()
 
-const { theme, currentThemeId, loadTheme, setTheme, getThemeStyle, themes } = useTheme()
+const { theme, currentThemeId, setTheme, getThemeStyle, themes } = useTheme()
 
 const {
   currentCardStyleId,
@@ -418,15 +426,11 @@ const {
   progressTarget,
   bingoJustCompleted,
   isAllDone,
-  loadState,
-  persistState,
   checkBingo,
   dismissBingo,
   applyTitles,
   clearTitles,
   changeGridSize,
-  isLoadingFromRemote,
-  loadBoardTitle,
 } = useBingoBoard()
 
 // Illustration mode (per-board preference + word→illustration cache + fetch logic).
@@ -434,10 +438,11 @@ const {
 const {
   isIllustMode,
   illustCache,
+  illustKeys,
   loadIllustMode,
   toggleIllustMode,
   autoPopulateIllustrations,
-} = useIllustMode({ cells, remoteBoardId, persistState })
+} = useIllustMode({ cells, remoteBoardId })
 
 const {
   previewImagePath,
@@ -448,7 +453,6 @@ const {
 
 const {
   wordBank,
-  loadWordBank,
   addWord,
   mergeWords,
 } = useWordBank()
@@ -464,7 +468,7 @@ const {
   assignWordToTarget,
   addAndAssignWord,
   closeWordPicker,
-} = useWordPicker({ cells, wordBank, addWord, illustCache })
+} = useWordPicker({ cells, wordBank, addWord, illustCache, illustKeys })
 
 // Board switcher dropdown (header menu) — state + open/close/navigate
 const {
@@ -563,11 +567,13 @@ function getBoardState(): 'empty' | 'words-only' | 'has-images' {
 // ── edit mode (manual edit) ──
 import type { BingoCell } from './useBingoBoard'
 let cellsSnapshot: BingoCell[] | null = null
+let editSelection: ReturnType<typeof captureSelection> | null = null
 
 function onManualEdit() {
   closeMenu()
   // Snapshot the current state so the user can restore it on cancel
   cellsSnapshot = cells.value.map((c) => ({ ...c }))
+  editSelection = captureSelection()
   isEditMode.value = true
 }
 
@@ -585,17 +591,9 @@ function cancelEditMode() {
     cancelText: '继续编辑',
     success: (res) => {
       if (!res.confirm) return
-      // Restore the snapshot
-      if (cellsSnapshot) {
-        cells.value.forEach((cell, i) => {
-          const snap = cellsSnapshot![i]
-          if (snap) {
-            cell.title = snap.title
-            cell.imagePath = snap.imagePath
-            cell.illustrationPath = snap.illustrationPath
-            cell.completed = snap.completed
-          }
-        })
+      if (cellsSnapshot && editSelection && selectionCurrent(editSelection)) {
+        const restored = cellsSnapshot.map(cell => ({ ...cell }))
+        if (!editLocal(() => { cells.value = restored })) return
       }
       cellsSnapshot = null
       // Pre-warm restored image URLs for fast preview
@@ -610,17 +608,14 @@ function cancelEditMode() {
 
 function onChangeGridSize(size: number) {
   closeMenu()
-  changeGridSize(size)
+  if (!changeGridSize(size)) return
   resetProgressMilestones()
   showMilestone('🔄', `已切换为 ${size}×${size}`)
 }
 
 async function onCreateWithSize(size: number) {
   closeMenu()
-
-  // Check if current board has any real content (photos or completed marks)
-  const hasContent = cells.value.some(c => c.imagePath || c.completed)
-
+  const target = captureSelection()
   const existingBoards = await fetchBoards()
   const existingTitles = existingBoards.map((b: any) => b.title)
   const defaultName = defaultBoardTitle(existingTitles)
@@ -635,14 +630,9 @@ async function onCreateWithSize(size: number) {
       fail: () => resolve(null),
     })
   })
-  if (!title) return
+  if (!title || !selectionCurrent(target)) return
 
   uni.showLoading({ title: '创建中…' })
-
-  // If current board is empty (no photos, no marks), delete it first
-  if (!hasContent && remoteBoardId.value) {
-    await removeBoard(remoteBoardId.value)
-  }
 
   const result = await createAndSwitchBoard(title, size, currentThemeId.value)
   uni.hideLoading()
@@ -668,7 +658,8 @@ async function handleCellTap(index: number) {
   }
 
   const cell = cells.value[index]
-  if (!cell) return
+  const target = captureCell(index, imageMode.value)
+  if (!cell || !target) return
   if (isActionSheetOpen.value || isPickingImage.value) return
   if (!cell.title) {
     openWordPicker(index)
@@ -676,16 +667,15 @@ async function handleCellTap(index: number) {
   }
 
   if (cell.imagePath) {
+    const selection = captureSelection()
     isActionSheetOpen.value = true
     uni.showActionSheet({
       itemList: ['预览照片', '替换照片', '取消标记'],
       success: async (res) => {
-        if (res.tapIndex === 0) previewCellImage(index)
-        if (res.tapIndex === 1) await pickImage(index)
+        if (res.tapIndex === 0 && selectionCurrent(selection) && targetCurrent(target)) previewCellImage(target.position)
+        if (res.tapIndex === 1) await pickImage(target)
         if (res.tapIndex === 2) {
-          cell.imagePath = undefined
-          cell.completed = false
-          cellResolvedUrls.value[index] = ''
+          editCell(target, current => { current.imagePath = undefined; current.completed = false })
         }
       },
       complete: () => { isActionSheetOpen.value = false },
@@ -699,10 +689,9 @@ async function handleCellTap(index: number) {
     uni.showActionSheet({
       itemList: ['📷 拍照/选图打卡', '❌ 取消标记'],
       success: async (res) => {
-        if (res.tapIndex === 0) await pickImage(index)
+        if (res.tapIndex === 0) await pickImage(target)
         if (res.tapIndex === 1) {
-          cell.completed = false
-          showProgressToast()
+          if (editCell(target, current => { current.completed = false })) showProgressToast()
         }
       },
       complete: () => { isActionSheetOpen.value = false },
@@ -711,10 +700,9 @@ async function handleCellTap(index: number) {
     uni.showActionSheet({
       itemList: ['📷 拍照/选图打卡', '✅ 仅标记完成'],
       success: async (res) => {
-        if (res.tapIndex === 0) await pickImage(index)
+        if (res.tapIndex === 0) await pickImage(target)
         if (res.tapIndex === 1) {
-          cell.completed = true
-          showProgressToast()
+          if (editCell(target, current => { current.completed = true })) showProgressToast()
         }
       },
       complete: () => { isActionSheetOpen.value = false },
@@ -722,55 +710,23 @@ async function handleCellTap(index: number) {
   }
 }
 
-async function pickImage(index: number) {
-  if (isPickingImage.value) return
-
-  // Show privacy notice only in cloud mode (photos are uploaded).
-  // requirePhotoConsent() returns true immediately if already dismissed.
-  const imageMode = safeGet(STORAGE_KEYS.IMAGE_MODE) || 'local'
-  if (imageMode === 'cloud') {
-    const confirmed = await requirePhotoConsent()
-    if (!confirmed) return
-  }
-
+async function pickImage(target: CellTarget) {
+  if (isPickingImage.value || !targetCurrent(target)) return
+  const mode = target.mode
   isPickingImage.value = true
-  // Haptic feedback
-  try { uni.vibrateShort({ type: 'light' }) } catch {}
   try {
+    if (mode === 'cloud' && !await requirePhotoConsent()) return
     const tempPath = await chooseSquareImage()
     if (!tempPath) return
     const uploadReadyPath = await prepareImageForUpload(tempPath)
     const savedPath = await saveImage(uploadReadyPath)
-    const cell = cells.value[index]
-    if (!cell) return
-
-    // Upload to server first (moderation check happens server-side)
-    // Skip upload in local image mode
-    const imageMode = safeGet(STORAGE_KEYS.IMAGE_MODE) || 'local'
-    let remoteUrl = ''
-    if (imageMode === 'cloud') {
-      try {
-        const uploaded = await pushComplete(index, savedPath)
-        if (uploaded?.url) remoteUrl = resolveApiUrl(uploaded.url)
-      } catch (err: any) {
-        const msg = err?.message || ''
-        if (msg.includes('不合规')) {
-          showMilestone('⚠️', '图片内容不合规，请更换图片')
-          return
-        }
-        // Any other upload failure (network/timeout/5xx): the server has no
-        // record of this image, so do NOT mark the cell complete with a
-        // local-only path — that would silently lose the photo on reload.
-        showMilestone('⚠️', '图片上传失败，请检查网络后重试')
-        return
-      }
+    if (!await completePhoto(target, savedPath)) {
+      showMilestone('⚠️', lastSyncError.value || '目标格子已变更，照片未应用')
+      return
     }
-
-    cell.imagePath = remoteUrl || savedPath
-    if (cell.imagePath?.startsWith('http')) preWarmLocalPaths([cell.imagePath])
-    cellResolvedUrls.value[index] = cell.imagePath
-    cell.completed = true
-    showProgressToast()
+    if (remoteBoardId.value === target.boardId) showProgressToast()
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '照片未能保存', icon: 'none' })
   } finally {
     isPickingImage.value = false
   }
@@ -865,10 +821,6 @@ function onOpenPublishPanel() {
   uni.navigateTo({ url: '/pages/publish/publish' })
 }
 
-function closePublishPanel() {
-  // No longer needed for modal, kept for backward compat
-}
-
 async function onTemplatePublished(templateId: number) {
   showMilestone('🎉', '发布成功')
   currentPublishedTemplateId.value = templateId
@@ -880,6 +832,7 @@ async function onCopyShareCode() {
 }
 
 async function onApplyShareCode() {
+  const target = captureSelection()
   const code = importCodeText.value.trim()
   if (!code) {
     uni.showToast({ title: '请粘贴分享码', icon: 'none' })
@@ -904,9 +857,10 @@ async function onApplyShareCode() {
       fail: () => resolve(null),
     })
   })
-  if (!boardName) return
+  if (!boardName || !selectionCurrent(target)) return
 
   const mergeResult = await mergeWords(parsed.titles)
+  if (!selectionCurrent(target)) return
   if (mergeResult.blocked) {
     showMilestone('⚠️', '分享码含违规内容，已拒绝')
     return
@@ -917,16 +871,11 @@ async function onApplyShareCode() {
   // Empty board → apply directly and rename
   const state = getBoardState()
   if (state === 'empty') {
-    if (parsed.gridSize !== gridSize.value) {
+    if (!editLocal(() => {
       changeGridSize(parsed.gridSize)
-    }
-    applyTitles(parsed.titles)
-    pushWordBank(wordBank.value)
-    const boards = await fetchBoards()
-    const active = boards.find((b: any) => b.isActive)
-    if (active) {
-      await renameBoard(active.id, boardName)
-    }
+      applyTitles(parsed.titles)
+      boardTitle.value = boardName
+    })) return
     showMilestone('📋', '已应用Bingo码')
     return
   }
@@ -937,6 +886,7 @@ async function onApplyShareCode() {
     boardName,
     parsed.gridSize,
     currentThemeId.value,
+    parsed.titles,
   )
   uni.hideLoading()
 
@@ -947,12 +897,11 @@ async function onApplyShareCode() {
 
   resetProgressMilestones()
   currentPublishedTemplateId.value = null
-  applyTitles(parsed.titles)
-  pushWordBank(wordBank.value)
   showMilestone('📋', '已创建新Bingo卡')
 }
 
 onShow(() => {
+  void retryPending()
   // Clear the illustration cache so we get fresh data after illustrations are uploaded from the word bank page
   illustCache.clear()
   if (isIllustMode.value) {
@@ -966,8 +915,7 @@ onShow(() => {
       safeRemove('_temp_apply_words')
       const words: string[] = JSON.parse(raw)
       if (words.length > 0) {
-        applyTitles(words)
-        showMilestone('📝', '已应用词语')
+        if (applyTitles(words)) showMilestone('📝', '已应用词语')
       }
     }
   } catch (_) { /* ignore */ }
@@ -983,23 +931,15 @@ async function mergeTemplateWords(words: string[]) {
   if (result.added > 0 && result.added < words.length) {
     uni.showToast({ title: '词库已满，部分词未导入', icon: 'none' })
   }
-  if (result.added > 0) {
-    await pushWordBank(wordBank.value)
-  }
 }
 
 // Listen for template-applied event from plaza
 interface TemplateAppliedData {
   oldTitle: string
   oldBoardId?: number | null
-  oldHasContent?: boolean
   templateWords?: string[]
 }
 const onTemplateApplied = async (data: TemplateAppliedData) => {
-  const result = await reloadActiveBoard()
-  if (result?.theme) {
-    setTheme(result.theme)
-  }
   resetProgressMilestones()
 
   // After switching templates, refresh illustrations (mirrors the board-switch flow)
@@ -1007,16 +947,8 @@ const onTemplateApplied = async (data: TemplateAppliedData) => {
   loadIllustMode()
   if (isIllustMode.value) autoPopulateIllustrations()
 
-  // Auto-delete old empty board (no content)
-  const shouldAutoDelete = data.oldBoardId && !data.oldHasContent
-  if (shouldAutoDelete) {
-    try {
-      await deleteBoard(data.oldBoardId!)
-    } catch { /* already gone or still active — ignore */ }
-  }
-
   setTimeout(() => {
-    if (shouldAutoDelete || !data.oldBoardId) {
+    if (!data.oldBoardId) {
       showMilestone('📋', '已应用模板')
     } else {
       showMilestone('📋', `「${data.oldTitle}」已保存至我的Bingo卡`)
@@ -1032,21 +964,39 @@ uni.$on('template-applied', onTemplateApplied)
 onUnmounted(() => {
   uni.$off('template-applied', onTemplateApplied)
   uni.$off('templatePublished', onTemplatePublished)
-  if (syncTimer) clearTimeout(syncTimer)
 })
 
+function onRecoverLocal() {
+  closeMenu()
+  const target = captureSelection()
+  uni.showModal({ title: '恢复本地卡片', content: '旧版数据没有账号归属。确认将它复制为当前账号的一张新卡？原数据会保留，照片不会自动上传。', confirmText: '复制新卡', success: async res => {
+    if (!res.confirm || !selectionCurrent(target)) return
+    if (!await importLocalRecovery()) uni.showToast({ title: '恢复未完成，原数据已保留', icon: 'none' })
+  } })
+}
+function copyLocalBackup() {
+  closeMenu()
+  uni.showModal({
+    title: '复制恢复信息（不含照片）',
+    content: '仅包含卡片数据和本机文件路径，不含照片文件，不能跨设备还原。当前不支持导入此 JSON。请勿据此清除缓存。',
+    confirmText: '复制信息',
+    success: res => { if (res.confirm) uni.setClipboardData({ data: exportLocalRecovery() }) },
+  })
+}
 function showOfflineDetail() {
   uni.showModal({
     title: '离线模式',
-    content: `${offlineReason.value}\n\n当前数据仅保存在本地，联网后将自动同步。`,
+    content: `${lastSyncError.value || offlineReason.value}\n\n已保存的数据保留在本地，联网后将重试同步。`,
     showCancel: true,
     cancelText: '知道了',
     confirmText: '重试',
     success: async (res) => {
       if (res.confirm) {
-        const ok = await ensureLoggedIn()
+        const ok = await ensureLoggedIn(true)
         if (ok) {
-          showMilestone('🌐', '已恢复在线')
+          const selected = await initialSync()
+          if (!selected || lastSyncError.value) uni.showToast({ title: lastSyncError.value || '启动尚未完成，请重试', icon: 'none' })
+          else showMilestone('🌐', '已恢复在线')
         } else {
           uni.showToast({ title: offlineReason.value, icon: 'none', duration: 3000 })
         }
@@ -1077,36 +1027,11 @@ function onBingoPublish() {
   onOpenPublishPanel()
 }
 
-// Debounced sync to the server (skip changes that came from a remote load)
-let syncTimer: ReturnType<typeof setTimeout> | null = null
-let lastCellsSnapshot = ''
-watch(cells, () => {
-  persistState()
-  // While loading data from the server, don't trigger the celebration and don't push back
-  if (isLoadingFromRemote()) return
-  checkBingo()
-  // Quick comparison: skip the push if content didn't change
-  const snapshot = JSON.stringify(cells.value.map(c => ({ t: c.title, d: c.completed })))
-  if (snapshot === lastCellsSnapshot) return
-  lastCellsSnapshot = snapshot
-  // Debounced push to the server
-  if (syncTimer) clearTimeout(syncTimer)
-  syncTimer = setTimeout(() => {
-    pushCells(cells.value, gridSize.value, currentThemeId.value).catch((err: any) => {
-      const msg = err?.message || ''
-      if (msg.includes('违规')) {
-        showMilestone('⚠️', '内容含违规信息，请修改')
-      }
-    })
-  }, 2000)
-}, { deep: true })
+watch(cells, () => { checkBingo() }, { deep: true })
 
 onMounted(async () => {
-  loadTheme()
-  loadState()
-  loadWordBank()
-  loadBoardTitle()
   loadIllustMode()
+  isLoading.value = false
 
   // Listen for publish success from publish page
   uni.$on('templatePublished', onTemplatePublished)
@@ -1121,24 +1046,8 @@ onMounted(async () => {
     })
   }
   if (ok) {
-    // Hydrate imageStorage preference from server
-    try {
-      const profile = await getProfile()
-      if (profile.imageStorage) safeSet(STORAGE_KEYS.IMAGE_MODE, profile.imageStorage)
-    } catch {}
     // initialSync now writes directly into the shared singleton state
-    const remote = await initialSync(
-      cells.value,
-      gridSize.value,
-      currentThemeId.value,
-      wordBank.value,
-    )
-    if (remote?.cells) {
-      // Populate cellResolvedUrls so the template can display images immediately
-      remote.cells.forEach((c) => {
-        if (c.imagePath) cellResolvedUrls.value[c.id] = c.imagePath
-      })
-    }
+    const remote = await initialSync()
     if (remote?.theme && remote.theme !== currentThemeId.value) {
       setTheme(remote.theme)
     }

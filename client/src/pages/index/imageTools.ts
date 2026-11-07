@@ -134,13 +134,13 @@ async function saveImage(tempPath: string) {
     const savedFilePath = await new Promise<string>((resolve, reject) => {
       fs.saveFile({
         tempFilePath: tempPath,
-        success: (res) => resolve(res.savedFilePath),
+        success: (res) => res.savedFilePath ? resolve(res.savedFilePath) : reject(new Error('照片保存路径无效')),
         fail: reject,
       })
     })
     return savedFilePath
   } catch {
-    return tempPath
+    throw new Error('照片未能保存到本地，请释放空间后重试')
   }
 }
 

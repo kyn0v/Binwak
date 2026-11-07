@@ -13,10 +13,10 @@
  * cache has a single home.
  *
  * Dependencies are injected so this stays decoupled from the page:
- *   useIllustMode({ cells, remoteBoardId, persistState })
+ *   useIllustMode({ cells, remoteBoardId })
  */
 import { ref, type Ref } from 'vue'
-import type { BingoCell } from './useBingoBoard'
+import { editBoard, type BingoCell } from './useBingoBoard'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { safeGet, safeSet } from '@/utils/safeStorage'
 import { matchIllustrations } from './api'
@@ -28,16 +28,16 @@ const ILLUST_MODE_PREFIX = STORAGE_KEYS.ILLUST_MODE_PREFIX
 export interface UseIllustModeDeps {
   cells: Ref<BingoCell[]>
   remoteBoardId: Ref<number | null>
-  persistState: () => void
 }
 
 export function useIllustMode(deps: UseIllustModeDeps) {
-  const { cells, remoteBoardId, persistState } = deps
+  const { cells, remoteBoardId } = deps
 
   const isIllustMode = ref(false)
   const illustLoading = ref(false)
   // word → illustrationUrl (or the sentinel 'none'); shared with the word picker.
   const illustCache = new Map<string, string>()
+  const illustKeys = new Map<string, string>()
   let fetching = false
 
   function illustModeKey(): string {
@@ -68,7 +68,9 @@ export function useIllustMode(deps: UseIllustModeDeps) {
    */
   async function autoPopulateIllustrations(): Promise<boolean> {
     if (fetching) return true // already in progress
-    const words = cells.value.map((c) => c.title).filter(Boolean)
+    const targets = cells.value.map(cell => ({ cell, title: cell.title, generation: cell.generation }))
+    const boardId = remoteBoardId.value
+    const words = targets.map(({ title }) => title).filter(Boolean)
     if (words.length === 0) return true
 
     const uncached = words.filter((w) => !illustCache.has(w))
@@ -81,6 +83,7 @@ export function useIllustMode(deps: UseIllustModeDeps) {
         for (const word of uncached) {
           const info = matches[word]
           illustCache.set(word, info ? info.illustrationUrl : 'none')
+          if (info) illustKeys.set(word, info.illustrationPath)
         }
       } catch {
         uni.showToast({ title: '插画加载失败，请重试', icon: 'none' })
@@ -93,17 +96,15 @@ export function useIllustMode(deps: UseIllustModeDeps) {
       }
     }
 
-    let changed = false
-    for (const cell of cells.value) {
-      const url = cell.title ? illustCache.get(cell.title) : undefined
-      if (url && url !== 'none' && cell.illustrationPath !== url) {
-        cell.illustrationPath = url
-        changed = true
+    if (remoteBoardId.value !== boardId) return false
+    const saved = editBoard(() => {
+      for (const { cell, title, generation } of targets) {
+        if (cells.value[cell.id] !== cell || cell.title !== title || cell.generation !== generation) continue
+        const url = title ? illustCache.get(title) : undefined
+        if (url && url !== 'none') { cell.illustrationPath = url; cell.illustrationKey = illustKeys.get(title) }
       }
-    }
-    if (changed) {
-      persistState()
-    }
+    })
+    if (!saved) return false
     // Pre-warm canvas local path cache so first preview is fast
     const urlsToWarm = cells.value
       .flatMap((c) => [c.illustrationPath, c.imagePath])
@@ -114,6 +115,7 @@ export function useIllustMode(deps: UseIllustModeDeps) {
 
   /** Toggle illustration mode, persisting the preference and falling back to text mode on failure / no matches. */
   async function toggleIllustMode() {
+    const boardId = remoteBoardId.value
     const wantIllust = !isIllustMode.value
     isIllustMode.value = wantIllust
     const key = illustModeKey()
@@ -121,6 +123,7 @@ export function useIllustMode(deps: UseIllustModeDeps) {
 
     if (wantIllust) {
       const ok = await autoPopulateIllustrations()
+      if (remoteBoardId.value !== boardId) return
       if (!ok) {
         // Fetch failed → fall back to text mode
         isIllustMode.value = false
@@ -141,6 +144,7 @@ export function useIllustMode(deps: UseIllustModeDeps) {
     isIllustMode,
     illustLoading,
     illustCache,
+    illustKeys,
     loadIllustMode,
     toggleIllustMode,
     autoPopulateIllustrations,

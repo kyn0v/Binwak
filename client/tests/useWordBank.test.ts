@@ -1,184 +1,102 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Mock the uni platform API before importing useWordBank.
-vi.stubGlobal('uni', {
-  getStorageSync: vi.fn(() => undefined),
-  setStorageSync: vi.fn(),
-})
-
-// mock checkContent API — default: pass
-vi.mock('../src/pages/index/api', () => ({
+vi.mock('../src/pages/index/api', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/pages/index/api')>(),
   checkContent: vi.fn().mockResolvedValue({ pass: true }),
 }))
-
-import { useWordBank } from '../src/pages/index/useWordBank'
-import { checkContent } from '../src/pages/index/api'
-
-describe('useWordBank', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(checkContent).mockResolvedValue({ pass: true })
+let words: ReturnType<typeof import('../src/pages/index/useWordBank')['useWordBank']>
+let api: typeof import('../src/pages/index/api')
+const disk = new Map<string, string>()
+let failSave = false
+beforeEach(async () => {
+  vi.resetModules(); vi.useFakeTimers(); disk.clear(); failSave = false
+  vi.stubGlobal('uni', {
+    getStorageSync: (key: string) => disk.has(key) ? JSON.parse(disk.get(key)!) : '',
+    setStorageSync: (key: string, value: unknown) => { if (failSave) throw new Error('quota'); disk.set(key, JSON.stringify(value)) },
+    removeStorageSync: (key: string) => disk.delete(key), showToast: vi.fn(), onNetworkStatusChange: vi.fn(),
   })
+  const { useSync } = await import('../src/pages/index/useSync')
+  useSync()
+  words = (await import('../src/pages/index/useWordBank')).useWordBank()
+  api = await import('../src/pages/index/api')
+  vi.mocked(api.checkContent).mockResolvedValue({ pass: true })
+  words.wordBank.value = []
+})
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
 
-  // ── addWord ──
-
-  describe('addWord', () => {
-    it('添加词语到开头', async () => {
-      const { wordBank, addWord } = useWordBank()
-      wordBank.value = ['已有词']
-      const ok = await addWord('新词')
-      expect(ok).toBe('ok')
-      expect(wordBank.value[0]).toBe('新词')
-      expect(wordBank.value).toHaveLength(2)
-    })
-
-    it('空字符串返回 empty', async () => {
-      const { addWord } = useWordBank()
-      expect(await addWord('')).toBe('empty')
-      expect(await addWord('   ')).toBe('empty')
-    })
-
-    it('自动 trim 空格', async () => {
-      const { wordBank, addWord } = useWordBank()
-      wordBank.value = []
-      await addWord('  前后空格  ')
-      expect(wordBank.value[0]).toBe('前后空格')
-    })
-
-    it('词库满时返回 full', async () => {
-      const { wordBank, addWord } = useWordBank()
-      wordBank.value = Array.from({ length: 500 }, (_, i) => `词${i}`)
-      expect(await addWord('超出')).toBe('full')
-    })
-
-    it('添加后自动持久化', async () => {
-      const { wordBank, addWord } = useWordBank()
-      wordBank.value = []
-      await addWord('测试')
-      expect(uni.setStorageSync).toHaveBeenCalled()
-    })
-
-    it('审核不通过返回 moderation_fail', async () => {
-      vi.mocked(checkContent).mockResolvedValue({ pass: false, message: '违规' })
-      const { wordBank, addWord } = useWordBank()
-      wordBank.value = []
-      const result = await addWord('违禁词')
-      expect(result).toBe('moderation_fail')
-      expect(wordBank.value).toHaveLength(0)
-    })
-
-    it('重复词返回 duplicate', async () => {
-      const { wordBank, addWord } = useWordBank()
-      wordBank.value = ['已有词']
-      const result = await addWord('已有词')
-      expect(result).toBe('duplicate')
-      expect(checkContent).not.toHaveBeenCalled()
-    })
+describe('word bank edits', () => {
+  it('adds trimmed words at the front', async () => {
+    words.wordBank.value = ['old']
+    expect(await words.addWord('  new  ')).toBe('ok')
+    expect(words.wordBank.value).toEqual(['new', 'old'])
   })
-
-  // ── updateWord ──
-
-  describe('updateWord', () => {
-    it('更新指定位置的词', async () => {
-      const { wordBank, updateWord } = useWordBank()
-      wordBank.value = ['A', 'B', 'C']
-      const ok = await updateWord(1, '新B')
-      expect(ok).toBe('ok')
-      expect(wordBank.value).toEqual(['A', '新B', 'C'])
-    })
-
-    it('空字符串返回 empty', async () => {
-      const { wordBank, updateWord } = useWordBank()
-      wordBank.value = ['A']
-      expect(await updateWord(0, '')).toBe('empty')
-    })
-
-    it('审核不通过返回 moderation_fail', async () => {
-      vi.mocked(checkContent).mockResolvedValue({ pass: false })
-      const { wordBank, updateWord } = useWordBank()
-      wordBank.value = ['A']
-      const result = await updateWord(0, '违禁')
-      expect(result).toBe('moderation_fail')
-      expect(wordBank.value).toEqual(['A'])
-    })
+  it('rejects empty words', async () => { expect(await words.addWord('  ')).toBe('empty') })
+  it('rejects duplicate words', async () => {
+    words.wordBank.value = ['old']
+    expect(await words.addWord('old')).toBe('duplicate')
   })
-
-  // ── removeWord ──
-
-  describe('removeWord', () => {
-    it('删除并返回被删的词', () => {
-      const { wordBank, removeWord } = useWordBank()
-      wordBank.value = ['A', 'B', 'C']
-      const removed = removeWord(1)
-      expect(removed).toBe('B')
-      expect(wordBank.value).toEqual(['A', 'C'])
-    })
-
-    it('越界返回 null', () => {
-      const { wordBank, removeWord } = useWordBank()
-      wordBank.value = ['A']
-      expect(removeWord(5)).toBeNull()
-    })
-
-    it('删除后自动持久化', () => {
-      const { wordBank, removeWord } = useWordBank()
-      wordBank.value = ['A', 'B']
-      removeWord(0)
-      expect(uni.setStorageSync).toHaveBeenCalled()
-    })
+  it('honors the word limit', async () => {
+    words.wordBank.value = Array.from({ length: 500 }, (_, i) => `word ${i}`)
+    expect(await words.addWord('extra')).toBe('full')
   })
-
-  // ── mergeWords ──
-
-  describe('mergeWords', () => {
-    it('批量合并新词', async () => {
-      const { wordBank, mergeWords } = useWordBank()
-      wordBank.value = ['A']
-      const result = await mergeWords(['B', 'C'])
-      expect(result).toEqual({ added: 2, blocked: false })
-      expect(wordBank.value).toEqual(['A', 'B', 'C'])
-    })
-
-    it('跳过已有的词', async () => {
-      const { wordBank, mergeWords } = useWordBank()
-      wordBank.value = ['A', 'B']
-      const result = await mergeWords(['B', 'C'])
-      expect(result).toEqual({ added: 1, blocked: false })
-    })
-
-    it('审核不通过返回 blocked', async () => {
-      vi.mocked(checkContent).mockResolvedValue({ pass: false })
-      const { wordBank, mergeWords } = useWordBank()
-      wordBank.value = []
-      const result = await mergeWords(['违禁1', '违禁2'])
-      expect(result).toEqual({ added: 0, blocked: true })
-      expect(wordBank.value).toHaveLength(0)
-    })
+  it('does not add moderated words', async () => {
+    vi.mocked(api.checkContent).mockResolvedValue({ pass: false })
+    expect(await words.addWord('blocked')).toBe('moderation_fail')
+    expect(words.wordBank.value).toEqual([])
   })
-
-  // ── loadWordBank ──
-
-  describe('loadWordBank', () => {
-    it('本地有数据时加载', () => {
-      vi.mocked(uni.getStorageSync).mockReturnValue(['已存', '词库'])
-      const { wordBank, loadWordBank } = useWordBank()
-      loadWordBank()
-      expect(wordBank.value).toEqual(['已存', '词库'])
-    })
-
-    it('本地无数据时用默认词库', () => {
-      vi.mocked(uni.getStorageSync).mockReturnValue(undefined)
-      const { wordBank, loadWordBank } = useWordBank()
-      loadWordBank()
-      expect(wordBank.value.length).toBeGreaterThan(0)
-    })
-
-    it('已加载后不会用旧缓存覆盖当前词库', () => {
-      vi.mocked(uni.getStorageSync).mockReturnValue(['旧词'])
-      const { wordBank, loadWordBank } = useWordBank()
-      wordBank.value = ['当前词', '模板词']
-      loadWordBank()
-      expect(wordBank.value).toEqual(['当前词', '模板词'])
-    })
+  it('updates one word', async () => {
+    words.wordBank.value = ['A', 'B']
+    expect(await words.updateWord(1, 'C')).toBe('ok')
+    expect(words.wordBank.value).toEqual(['A', 'C'])
+  })
+  it('does not create duplicates when editing', async () => {
+    words.wordBank.value = ['A', 'B']
+    expect(await words.updateWord(1, 'A')).toBe('duplicate')
+    expect(words.wordBank.value).toEqual(['A', 'B'])
+  })
+  it('does not update moderated words', async () => {
+    words.wordBank.value = ['A']
+    vi.mocked(api.checkContent).mockResolvedValue({ pass: false })
+    expect(await words.updateWord(0, 'blocked')).toBe('moderation_fail')
+    expect(words.wordBank.value).toEqual(['A'])
+  })
+  it('removes one word and rejects an absent position', () => {
+    words.wordBank.value = ['A', 'B']
+    expect(words.removeWord(0)).toBe('A')
+    expect(words.wordBank.value).toEqual(['B'])
+    expect(words.removeWord(5)).toBeNull()
+  })
+  it('deduplicates within a batch and against current words', async () => {
+    words.wordBank.value = ['A']
+    expect(await words.mergeWords(['A', 'B', ' B ', 'C', 'C'])).toEqual({ added: 2, blocked: false })
+    expect(words.wordBank.value).toEqual(['A', 'B', 'C'])
+  })
+  it('rejects a moderated batch', async () => {
+    vi.mocked(api.checkContent).mockResolvedValue({ pass: false })
+    expect(await words.mergeWords(['blocked'])).toEqual({ added: 0, blocked: true })
+    expect(words.wordBank.value).toEqual([])
+  })
+  it('restores all edit kinds after restart', async () => {
+    await words.addWord('A'); await words.addWord('B'); await words.updateWord(0, 'C')
+    await words.mergeWords(['D', 'D']); words.removeWord(1)
+    vi.resetModules()
+    ;(await import('../src/pages/index/useSync')).useSync()
+    expect((await import('../src/pages/index/useWordBank')).useWordBank().wordBank.value).toEqual(['C', 'D'])
+  })
+  it('returns failure and restores words when storage is full', async () => {
+    words.wordBank.value = ['A']; failSave = true
+    expect(await words.addWord('B')).toBe('save_failed')
+    expect(words.wordBank.value).toEqual(['A'])
+    expect(words.removeWord(0)).toBeNull()
+    expect(words.wordBank.value).toEqual(['A'])
+  })
+  it('rejects moderation completed under another login', async () => {
+    let finish!: (value: { pass: boolean }) => void
+    vi.mocked(api.checkContent).mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const adding = words.addWord('old account')
+    api.setToken('another-account-token')
+    finish({ pass: true })
+    expect(await adding).toBe('stale')
+    expect(words.wordBank.value).not.toContain('old account')
   })
 })

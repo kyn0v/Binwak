@@ -99,15 +99,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { getBoards, getMyTemplates, getProfile, updateNickname, updateImageStorage } from '../index/api'
+import { getBoards, getMyTemplates, getProfile, updateNickname } from '../index/api'
 import { useWordBank } from '../index/useWordBank'
+import { usePhotoPreference } from '../index/usePhotoPreference'
 import { STORAGE_KEYS } from '@/config/storageKeys'
 import { ENABLE_TEMPLATE_PUBLISHING } from '@/config/features'
 import { safeGet, safeSet } from '@/utils/safeStorage'
 
 const props = withDefaults(defineProps<{ capsuleTop?: number }>(), { capsuleTop: 0 })
 
-const { wordBank, loadWordBank } = useWordBank()
+const { wordBank } = useWordBank()
 
 const nickname = ref('')
 const NICKNAME_KEY = STORAGE_KEYS.NICKNAME
@@ -115,7 +116,7 @@ const displayName = computed(() => nickname.value || 'Bingo 玩家')
 
 const boardCount = ref(0)
 const myTemplateCount = ref(0)
-const imageMode = ref<'local' | 'cloud'>((safeGet(STORAGE_KEYS.IMAGE_MODE) as 'local' | 'cloud') || 'local')
+const { imageMode, capturePreference, hydratePreference, setImageMode } = usePhotoPreference()
 
 const wordBankCount = computed(() => wordBank.value.length)
 
@@ -136,16 +137,18 @@ function goToFeedback() {
 }
 
 function toggleImageMode() {
-  const items = ['本地（临时）', '云端（持久）']
+  let target: ReturnType<typeof capturePreference>
+  try { target = capturePreference() } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '照片偏好无法读取', icon: 'none' })
+    return
+  }
+  const items = ['本地（仅此设备）', '云端']
   uni.showActionSheet({
     itemList: items,
     success: async ({ tapIndex }) => {
       const newMode = tapIndex === 0 ? 'local' : 'cloud'
-      if (newMode === imageMode.value) return
       try {
-        const profile = await updateImageStorage(newMode)
-        imageMode.value = profile.imageStorage
-        safeSet(STORAGE_KEYS.IMAGE_MODE, profile.imageStorage)
+        if (!await setImageMode(newMode, target)) return
       } catch (err) {
         uni.showToast({ title: (err as Error).message || '切换失败，请重试', icon: 'none' })
         return
@@ -204,13 +207,11 @@ async function fetchProfile() {
   if (cached) nickname.value = cached
 
   try {
+    const target = capturePreference()
     const profile = await getProfile()
     nickname.value = profile.nickname || ''
     safeSet(NICKNAME_KEY, nickname.value)
-    if (profile.imageStorage) {
-      imageMode.value = profile.imageStorage
-      safeSet(STORAGE_KEYS.IMAGE_MODE, profile.imageStorage)
-    }
+    hydratePreference(profile, target)
   } catch (err) {
     console.warn('获取用户信息失败:', err)
   }
@@ -247,7 +248,6 @@ function onEditNickname() {
 }
 
 onMounted(() => {
-  loadWordBank()
   fetchStats()
   fetchTemplateCount()
   fetchProfile()

@@ -115,12 +115,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useTheme } from '../index/useTheme'
 import { useWordBank } from '../index/useWordBank'
 import { useBingoBoard } from '../index/useBingoBoard'
-import { fetchIllustrations, uploadIllustration, replaceWordBank } from '../index/api'
+import { fetchIllustrations, uploadIllustration } from '../index/api'
+import { useSync } from '../index/useSync'
 import { IMAGE_SIZE_TYPE } from '@/config/image'
 import type { Illustration } from '../../../../shared/types'
 
-const { getThemeStyle, loadTheme } = useTheme()
-const { wordBank, loadWordBank, addWord, updateWord, removeWord } = useWordBank()
+const { editLocal, captureSelection, selectionCurrent } = useSync()
+const { getThemeStyle } = useTheme()
+const { wordBank, addWord, updateWord, removeWord } = useWordBank()
 const { cells } = useBingoBoard()
 
 const newWordText = ref('')
@@ -128,6 +130,8 @@ const searchKeyword = ref('')
 const showEditor = ref(false)
 const editWordText = ref('')
 const editWordIndex = ref<number | null>(null)
+let editTarget: ReturnType<typeof captureSelection> | null = null
+let originalWord = ''
 const showBackToTop = ref(false)
 const scrollTopVal = ref(0)
 let lastScrollTop = 0
@@ -135,8 +139,6 @@ let lastScrollTop = 0
 // Batch mode
 const batchMode = ref(false)
 const selectedIndices = ref<Set<number>>(new Set())
-let wordBankSyncing = false
-let pendingWordBankSync = false
 
 const isAllSelected = computed(() =>
   filteredWords.value.length > 0 &&
@@ -165,36 +167,19 @@ function toggleSelectAll() {
   }
 }
 
-async function syncWordBankLatest() {
-  if (wordBankSyncing) {
-    pendingWordBankSync = true
-    return
-  }
-  wordBankSyncing = true
-  do {
-    pendingWordBankSync = false
-    try {
-      await replaceWordBank([...wordBank.value])
-    } catch (err: any) {
-      uni.showToast({ title: err?.message || '词库同步失败', icon: 'none' })
-    }
-  } while (pendingWordBankSync)
-  wordBankSyncing = false
-}
-
 function batchDelete() {
   if (selectedIndices.value.size === 0) return
   const count = selectedIndices.value.size
+  const target = captureSelection()
+  const selectedWords = [...selectedIndices.value].map(index => wordBank.value[index])
   uni.showModal({
     title: '批量删除',
     content: `确定删除选中的 ${count} 个词语吗？`,
     success(res) {
-      if (!res.confirm) return
-      const indices = [...selectedIndices.value].sort((a, b) => b - a)
-      for (const idx of indices) removeWord(idx)
+      if (!res.confirm || !selectionCurrent(target)) return
+      if (!editLocal(() => { wordBank.value = wordBank.value.filter(word => !selectedWords.includes(word)) })) return
       selectedIndices.value = new Set()
       batchMode.value = false
-      syncWordBankLatest()
       uni.showToast({ title: `已删除 ${count} 个词语`, icon: 'success' })
     },
   })
@@ -219,15 +204,18 @@ async function loadIllustrations() {
 }
 
 async function pickIllustration(word: string) {
+  const target = captureSelection()
   uni.chooseImage({
     count: 1,
     sizeType: [...IMAGE_SIZE_TYPE],
     sourceType: ['album'],
     success: async (res) => {
+      if (!selectionCurrent(target)) return
       const tempPath = res.tempFilePaths[0]
       uni.showLoading({ title: '上传中...' })
       try {
         const result = await uploadIllustration(tempPath, word)
+        if (!selectionCurrent(target)) return
         // Update local state
         const idx = illustrations.value.findIndex(i => i.word === word)
         if (idx >= 0) {
@@ -294,27 +282,27 @@ function removeWordFromBank(idx: number) {
   const word = wordBank.value[idx]
   if (word === undefined) return
   const inUse = cells.value.some(c => c.title === word)
+  const target = captureSelection()
 
   uni.showModal({
     title: inUse ? '该词正在使用中' : '删除词语',
     content: `确定删除"${word}"吗？${inUse ? '（当前Bingo卡中正在使用）' : ''}`,
     success(res) {
-      if (res.confirm) {
-        removeWord(idx)
-        syncWordBankLatest()
-      }
+      if (res.confirm && selectionCurrent(target) && wordBank.value[idx] === word) removeWord(idx)
     },
   })
 }
 
 function startEditWord(idx: number) {
+  editTarget = captureSelection()
+  originalWord = wordBank.value[idx]
   editWordIndex.value = idx
   editWordText.value = wordBank.value[idx]
   showEditor.value = true
 }
 
 async function saveEditWord() {
-  if (editWordIndex.value === null) return
+  if (editWordIndex.value === null || !editTarget || !selectionCurrent(editTarget) || wordBank.value[editWordIndex.value] !== originalWord) return
   const text = editWordText.value.trim()
   if (!text) {
     uni.showToast({ title: '词语不能为空', icon: 'none' })
@@ -331,8 +319,6 @@ async function saveEditWord() {
 }
 
 onMounted(() => {
-  loadTheme()
-  loadWordBank()
   loadIllustrations()
 })
 </script>

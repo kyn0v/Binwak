@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { DEFAULT_GRID_SIZE, GRID_SIZE_OPTIONS, GRID_SIZE_KEY, DEFAULT_WORDS } from './bingoDefaults'
+import { DEFAULT_GRID_SIZE, GRID_SIZE_OPTIONS, DEFAULT_WORDS } from './bingoDefaults'
 
 type BingoCell = {
   id: number
@@ -7,19 +7,12 @@ type BingoCell = {
   imagePath?: string
   illustrationPath?: string
   completed: boolean
+  localPath?: string
+  imageName?: string
+  suppressedImageName?: string
+  illustrationKey?: string
+  generation?: number
 }
-
-type BingoState = {
-  cells: BingoCell[]
-  hasBingo: boolean
-  gridSize?: number
-}
-
-import { STORAGE_KEYS } from '@/config/storageKeys'
-import { safeGet, safeSet, safeRemove } from '@/utils/safeStorage'
-
-const STORAGE_KEY = STORAGE_KEYS.BINGO_STATE
-const BOARD_TITLE_KEY = STORAGE_KEYS.BOARD_TITLE
 
 // ── Singleton state (shared across all pages) ─────────────
 const gridSize = ref(DEFAULT_GRID_SIZE)
@@ -34,11 +27,11 @@ const lastSeenLineCount = ref(0)
 // completedCount diverge and the bar resumes tracking the next line. -1 = none.
 const lastBingoCompletedCount = ref(-1)
 
-/**
- * Guard flag – while true the cells watcher should NOT push to server.
- * Used by useSync when loading remote data into the shared state.
- */
-let _loadingFromRemote = false
+let resetAction: () => Promise<boolean> = async () => false
+export function installResetAction(action: typeof resetAction) { resetAction = action }
+let localEdit: (change: () => void) => boolean = change => { change(); return true }
+export function installLocalEdit(handler: typeof localEdit) { localEdit = handler }
+export function editBoard(change: () => void): boolean { return localEdit(change) }
 
 function createCells(size: number): BingoCell[] {
   const total = size * size
@@ -96,20 +89,6 @@ function getAllLines(gridSize: number): number[][] {
 
 function getBingoLines(source: BingoCell[], gridSize: number) {
   return getAllLines(gridSize).filter((line) => line.every((idx) => source[idx]?.completed))
-}
-
-function sanitizeCells(saved: BingoState, gridSize: number) {
-  const total = gridSize * gridSize
-  return Array.from({ length: total }, (_, index) => {
-    const cell = saved.cells[index]
-    return {
-      id: index,
-      title: cell?.title || '',
-      imagePath: cell?.imagePath,
-      illustrationPath: cell?.illustrationPath?.startsWith('/static/') ? undefined : cell?.illustrationPath,
-      completed: Boolean(cell?.completed),
-    }
-  })
 }
 
 function applyTitlesToCells(source: BingoCell[], titles: string[]) {
@@ -179,63 +158,28 @@ export function useBingoBoard() {
     return getBingoLines(cells.value, gridSize.value).length
   }
 
-  function loadState() {
-    // A freshly loaded board is mid-progress, never a just-achieved bingo.
-    lastBingoCompletedCount.value = -1
-    // Load grid size
-    const savedSize = safeGet<number>(GRID_SIZE_KEY)
-    if (savedSize && GRID_SIZE_OPTIONS.includes(savedSize)) {
-      gridSize.value = savedSize
-    }
-
-    const saved = safeGet<BingoState>(STORAGE_KEY)
-    const total = gridSize.value * gridSize.value
-    if (saved?.cells?.length === total) {
-      cells.value = sanitizeCells(saved, gridSize.value)
-      const count = currentLineCount()
-      bingoLineCount.value = count
-      lastSeenLineCount.value = count // don't re-trigger on load
+  function changeGridSize(newSize: number): boolean {
+    if (!GRID_SIZE_OPTIONS.includes(newSize)) return false
+    if (newSize === gridSize.value) return true
+    return editBoard(() => {
+      gridSize.value = newSize
+      cells.value = createCells(newSize)
       showBingo.value = false
-    } else {
-      cells.value = createDefaultCells(gridSize.value)
-    }
-  }
-
-  function persistState() {
-    const state: BingoState = {
-      cells: cells.value,
-      hasBingo: bingoLineCount.value > 0,
-      gridSize: gridSize.value,
-    }
-    safeSet(STORAGE_KEY, state)
-  }
-
-  function changeGridSize(newSize: number) {
-    if (!GRID_SIZE_OPTIONS.includes(newSize)) return
-    if (newSize === gridSize.value) return
-    gridSize.value = newSize
-    safeSet(GRID_SIZE_KEY, newSize)
-    cells.value = createCells(newSize)
-    showBingo.value = false
-    bingoLineCount.value = 0
-    lastSeenLineCount.value = 0
-    lastBingoCompletedCount.value = -1
-    persistState()
+      bingoLineCount.value = 0
+      lastSeenLineCount.value = 0
+      lastBingoCompletedCount.value = -1
+    })
   }
 
   function resetBoard(onConfirmed?: () => void) {
+    const originalCells = cells.value
+    const snapshot = JSON.stringify(originalCells)
     uni.showModal({
       title: '重置卡片',
       content: '确定要清空所有进度和照片吗？',
-      success: (res) => {
-        if (!res.confirm) return
-        cells.value = createCells(gridSize.value)
-        showBingo.value = false
-        bingoLineCount.value = 0
-        lastSeenLineCount.value = 0
-        lastBingoCompletedCount.value = -1
-        safeRemove(STORAGE_KEY)
-        onConfirmed?.()
+      success: async (res) => {
+        if (!res.confirm || cells.value !== originalCells || JSON.stringify(cells.value) !== snapshot) return
+        if (await resetAction()) onConfirmed?.()
       },
     })
   }
@@ -243,7 +187,7 @@ export function useBingoBoard() {
   function toggleComplete(index: number) {
     const cell = cells.value[index]
     if (!cell) return
-    cell.completed = !cell.completed
+    return editBoard(() => { cell.completed = !cell.completed })
   }
 
   function checkBingo() {
@@ -275,20 +219,16 @@ export function useBingoBoard() {
   }
 
   function applyTitles(titles: string[]) {
-    cells.value = applyTitlesToCells(cells.value, titles)
+    return editBoard(() => { cells.value = applyTitlesToCells(cells.value, titles) })
   }
 
   function clearTitles(titles: string[]) {
     if (titles.length === 0) return
     const titleSet = new Set(titles)
-    cells.value = cells.value.map((cell) => {
-      if (!titleSet.has(cell.title)) return cell
-      return {
-        ...cell,
-        title: '',
-        imagePath: undefined,
-        completed: false,
-      }
+    return editBoard(() => {
+      cells.value = cells.value.map((cell) => titleSet.has(cell.title)
+        ? { id: cell.id, title: '', completed: false }
+        : cell)
     })
   }
 
@@ -307,8 +247,7 @@ export function useBingoBoard() {
     isAllDone,
     resetBoard,
     toggleComplete,
-    loadState,
-    persistState,
+    editBoard,
     checkBingo,
     dismissBingo,
     applyTitles,
@@ -325,21 +264,9 @@ export function useBingoBoard() {
       // instant the user completes a line. The freeze clears naturally when the
       // user marks another cell (completedCount diverges from the captured value).
     },
-    /** True while useSync is writing remote data into cells/boardTitle */
-    isLoadingFromRemote: () => _loadingFromRemote,
-    setLoadingFromRemote: (v: boolean) => { _loadingFromRemote = v },
-    /** Save boardTitle to local storage */
-    saveBoardTitle: (title: string) => {
-      boardTitle.value = title
-      safeSet(BOARD_TITLE_KEY, title)
-    },
-    /** Load boardTitle from local storage */
-    loadBoardTitle: () => {
-      const saved = safeGet<string>(BOARD_TITLE_KEY)
-      if (saved) boardTitle.value = saved
-    },
+    saveBoardTitle: (title: string) => editBoard(() => { boardTitle.value = title }),
   }
 }
 
-export type { BingoCell, BingoState }
-export { createCells, createDefaultCells, getBingoLines, sanitizeCells, applyTitlesToCells, GRID_SIZE_OPTIONS, BOARD_TITLE_KEY }
+export type { BingoCell }
+export { createCells, createDefaultCells, getBingoLines, applyTitlesToCells, GRID_SIZE_OPTIONS }

@@ -246,7 +246,11 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
-import { getTemplates, getTemplate, useTemplate, favoriteTemplate, getBoards, getBoard, type TemplateListParams } from '../index/api'
+import { getTemplates, getTemplate, favoriteTemplate, type TemplateListParams } from '../index/api'
+import { useSync } from '../index/useSync'
+import { useBingoBoard } from '../index/useBingoBoard'
+const { createFromTemplate, captureSelection, selectionCurrent, remoteBoardId } = useSync()
+const { boardTitle } = useBingoBoard()
 import type { TemplateListItem, Template, TemplateCategory } from '../../../../shared/types'
 
 const props = withDefaults(defineProps<{ capsuleTop?: number }>(), { capsuleTop: 0 })
@@ -479,6 +483,8 @@ async function onToggleFavoriteDetail() {
 
 async function onUseTemplate() {
   if (!selectedTemplate.value) return
+  const target = captureSelection()
+  const templateId = selectedTemplate.value.id
   const templateWords = selectedTemplate.value.cells.map((c: any) => c.title).filter(Boolean) as string[]
 
   // Prompt for board name
@@ -494,38 +500,20 @@ async function onUseTemplate() {
       fail: () => resolve(null),
     })
   })
-  if (!boardName) return
+  if (!boardName || !selectionCurrent(target)) return
 
   try {
-    // Fetch current active board info
-    let oldTitle = ''
-    let oldBoardId: number | null = null
-    let oldHasContent = true
-
-    try {
-      const boards = await getBoards()
-      const active = boards.find(b => b.isActive)
-      if (active) {
-        oldTitle = active.title
-        oldBoardId = active.id
-        const imgCount = (active as any).imageCount ?? 0
-        oldHasContent = imgCount > 0
-        if (imgCount === 0) {
-          const detail = await getBoard(active.id)
-          oldHasContent = detail.cells.some(c => c.title && c.title.trim())
-        }
-      }
-    } catch { /* keep existing board when uncertain */ }
-
+    const oldTitle = boardTitle.value
+    const oldBoardId = remoteBoardId.value
     uni.showLoading({ title: '创建中...' })
-    await useTemplate(selectedTemplate.value.id, boardName)
+    const created = await createFromTemplate(templateId, boardName)
     uni.hideLoading()
+    if (!created) throw new Error('创建未完成，原卡片已保留')
 
     closeDetail()
     uni.$emit('template-applied', {
       oldTitle,
       oldBoardId,
-      oldHasContent,
       templateWords,
     })
 

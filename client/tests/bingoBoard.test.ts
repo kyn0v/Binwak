@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { createCells, createDefaultCells, getBingoLines, sanitizeCells, applyTitlesToCells } from '../src/pages/index/useBingoBoard'
+import { createCells, createDefaultCells, getBingoLines, applyTitlesToCells } from '../src/pages/index/useBingoBoard'
 import { useBingoBoard } from '../src/pages/index/useBingoBoard'
 import { DEFAULT_WORDS } from '../src/pages/index/bingoDefaults'
-import type { BingoCell, BingoState } from '../src/pages/index/useBingoBoard'
+import type { BingoCell } from '../src/pages/index/useBingoBoard'
 
 // ── createCells ──
 
@@ -144,51 +144,6 @@ describe('getBingoLines', () => {
   it('差一格不算完成', () => {
     const cells = makeCells(3, [0, 1]) // First row is missing index 2.
     expect(getBingoLines(cells, 3)).toHaveLength(0)
-  })
-})
-
-// ── sanitizeCells ──
-
-describe('sanitizeCells', () => {
-  it('恢复保存的数据', () => {
-    const saved: BingoState = {
-      cells: [
-        { id: 0, title: 'A', completed: true },
-        { id: 1, title: 'B', completed: false },
-        { id: 2, title: 'C', completed: true },
-        { id: 3, title: '', completed: false },
-      ],
-      hasBingo: false,
-      gridSize: 2,
-    }
-    const result = sanitizeCells(saved, 2)
-    expect(result).toHaveLength(4)
-    expect(result[0].title).toBe('A')
-    expect(result[0].completed).toBe(true)
-    expect(result[2].title).toBe('C')
-  })
-
-  it('缺失的格子用默认值填充', () => {
-    const saved: BingoState = {
-      cells: [{ id: 0, title: 'X', completed: false }],
-      hasBingo: false,
-      gridSize: 2,
-    }
-    const result = sanitizeCells(saved, 2)
-    expect(result).toHaveLength(4)
-    expect(result[0].title).toBe('X')
-    // Other cells should be filled safely.
-    expect(result[1].completed).toBe(false)
-  })
-
-  it('completed 被强转为 boolean', () => {
-    const saved: BingoState = {
-      cells: [{ id: 0, title: 'A', completed: 1 as any }],
-      hasBingo: false,
-    }
-    const result = sanitizeCells(saved, 1)
-    expect(result[0].completed).toBe(true)
-    expect(typeof result[0].completed).toBe('boolean')
   })
 })
 
