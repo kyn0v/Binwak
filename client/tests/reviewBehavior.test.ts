@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { ref, watch } from 'vue'
 import fs from 'node:fs'
+import assert from 'node:assert/strict'
 import ts from 'typescript'
 import { DEFAULT_WORDS } from '../src/pages/index/bingoDefaults'
 
@@ -221,6 +222,29 @@ it('does not copy recovery content into a different selected card during creatio
   expect(sync.remoteBoardId.value).toBe(2)
   expect(board.cells.value[0].title).toBe('word 2-0')
   expect(board.gridSize.value).toBe(3)
+})
+it.each(['unchanged', 'another-board', 'replaced-cell', 'replaced-photo', 'account'])('opens a delayed photo preview only for its still-selected captured cell: %s', async change => {
+  const { sync, board } = await open()
+  const initialTarget = sync.captureCell(0, 'local')
+  assert(initialTarget)
+  expect(await sync.completePhoto(initialTarget, 'wxfile://saved/card-one')).toBe(true)
+  const photoTarget = sync.captureCell(0, 'local')
+  assert(photoTarget)
+  const cellPreviewIndex = ref<number | null>(null)
+  const h = handlers(['handleCellTap', 'previewCellImage'], {
+    cells: board.cells, imageMode: ref('local'), captureCell: sync.captureCell,
+    targetCurrent: sync.targetCurrent, remoteBoardId: sync.remoteBoardId,
+    showBoardSwitcher: ref(false), isEditMode: ref(false), isActionSheetOpen: ref(false), isPickingImage: ref(false),
+    cellPreviewIndex, flippedCells: ref({}),
+  })
+  await h.handleCellTap(0)
+  const pending = actionSheet
+  if (change === 'another-board') await sync.switchBoard(2)
+  if (change === 'replaced-cell') sync.editCell(photoTarget, cell => { cell.title = 'replacement task' })
+  if (change === 'replaced-photo') await sync.completePhoto(photoTarget, 'wxfile://saved/replacement')
+  if (change === 'account') backend.epoch++
+  await pending.success({ tapIndex: 0 })
+  expect(cellPreviewIndex.value).toBe(change === 'unchanged' ? 0 : null)
 })
 it('keeps captured local privacy and rejects a replaced cloud target', async () => {
   const { sync, board } = await open()

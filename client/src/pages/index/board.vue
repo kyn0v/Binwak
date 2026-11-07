@@ -671,7 +671,7 @@ async function handleCellTap(index: number) {
     uni.showActionSheet({
       itemList: ['预览照片', '替换照片', '取消标记'],
       success: async (res) => {
-        if (res.tapIndex === 0) previewCellImage(index)
+        if (res.tapIndex === 0 && remoteBoardId.value === target.boardId && targetCurrent(target)) previewCellImage(target.position)
         if (res.tapIndex === 1) await pickImage(target)
         if (res.tapIndex === 2) {
           editCell(target, current => { current.imagePath = undefined; current.completed = false })
