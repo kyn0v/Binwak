@@ -223,8 +223,14 @@ it('does not copy recovery content into a different selected card during creatio
   expect(board.cells.value[0].title).toBe('word 2-0')
   expect(board.gridSize.value).toBe(3)
 })
-it.each(['unchanged', 'another-board', 'replaced-cell', 'replaced-photo', 'account'])('opens a delayed photo preview only for its still-selected captured cell: %s', async change => {
-  const { sync, board } = await open()
+it.each(['unchanged', 'guest', 'another-board', 'returned-board', 'replaced-cell', 'replaced-photo', 'account'])('opens a delayed photo preview only for its still-selected captured cell: %s', async change => {
+  if (change === 'guest') { backend.logged = false; backend.principal = '' }
+  const { sync, board } = await open(change !== 'guest')
+  if (change === 'guest') {
+    expect(sync.remoteBoardId.value).toBeNull()
+    expect(sync.captureSelection().boardId).toBe(0)
+    expect(sync.editLocal(() => { board.cells.value[0].title = 'guest task' })).toBe(true)
+  }
   const initialTarget = sync.captureCell(0, 'local')
   assert(initialTarget)
   expect(await sync.completePhoto(initialTarget, 'wxfile://saved/card-one')).toBe(true)
@@ -233,18 +239,19 @@ it.each(['unchanged', 'another-board', 'replaced-cell', 'replaced-photo', 'accou
   const cellPreviewIndex = ref<number | null>(null)
   const h = handlers(['handleCellTap', 'previewCellImage'], {
     cells: board.cells, imageMode: ref('local'), captureCell: sync.captureCell,
-    targetCurrent: sync.targetCurrent, remoteBoardId: sync.remoteBoardId,
+    targetCurrent: sync.targetCurrent, captureSelection: sync.captureSelection, selectionCurrent: sync.selectionCurrent,
     showBoardSwitcher: ref(false), isEditMode: ref(false), isActionSheetOpen: ref(false), isPickingImage: ref(false),
     cellPreviewIndex, flippedCells: ref({}),
   })
   await h.handleCellTap(0)
   const pending = actionSheet
-  if (change === 'another-board') await sync.switchBoard(2)
+  if (change === 'another-board' || change === 'returned-board') await sync.switchBoard(2)
+  if (change === 'returned-board') await sync.switchBoard(1)
   if (change === 'replaced-cell') sync.editCell(photoTarget, cell => { cell.title = 'replacement task' })
   if (change === 'replaced-photo') await sync.completePhoto(photoTarget, 'wxfile://saved/replacement')
   if (change === 'account') backend.epoch++
   await pending.success({ tapIndex: 0 })
-  expect(cellPreviewIndex.value).toBe(change === 'unchanged' ? 0 : null)
+  expect(cellPreviewIndex.value).toBe(change === 'unchanged' || change === 'guest' ? 0 : null)
 })
 it('keeps captured local privacy and rejects a replaced cloud target', async () => {
   const { sync, board } = await open()
