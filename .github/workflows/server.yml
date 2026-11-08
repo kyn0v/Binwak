@@ -2,23 +2,86 @@ name: Server
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: Reviewed Nginx packet action
+        required: true
+        type: choice
+        options: [inspect, apply, verify, rollback]
+      reviewed_commit:
+        description: Exact reviewed diagnostic branch commit, never merge
+        required: true
+        type: string
+      reviewed_workflow_sha:
+        description: SHA256 of actual checked-out server.yml
+        required: true
+        type: string
+      reviewed_runner_sha:
+        description: SHA256 of actual run-nginx-fix.sh
+        required: true
+        type: string
+      reviewed_packet_sha:
+        description: SHA256 of actual standalone nginx-fix.cjs
+        required: true
+        type: string
+      target_path:
+        description: Canonical target path from approved inspect, empty for inspect
+        type: string
+      file_shas:
+        description: Original and patched source SHA256 pair separated by one space
+        type: string
+      full_sha:
+        description: Original full nginx-T stdout SHA256 from approved inspect
+        type: string
+      patched_full_sha:
+        description: Predicted patched full nginx-T stdout SHA256 from approved inspect
+        type: string
+      runtime_sha:
+        description: Approved master identity SHA256 from inspect
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: binwak-nginx-admin-maintenance
+  cancel-in-progress: false
+
 jobs:
   inspect:
+    if: github.ref == 'refs/heads/chore/release-preflight'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Configure deployment SSH
+        with:
+          persist-credentials: false
+      - name: Check exact reviewed delivery bytes
+        env:
+          REVIEWED_COMMIT: ${{ inputs.reviewed_commit }}
+          REVIEWED_WORKFLOW_SHA: ${{ inputs.reviewed_workflow_sha }}
+          REVIEWED_RUNNER_SHA: ${{ inputs.reviewed_runner_sha }}
+          REVIEWED_PACKET_SHA: ${{ inputs.reviewed_packet_sha }}
+          ACTUAL_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$ACTUAL_COMMIT" == "$REVIEWED_COMMIT" ]]
+          [[ "$(git rev-parse HEAD)" == "$REVIEWED_COMMIT" ]]
+          for value in "$REVIEWED_WORKFLOW_SHA" "$REVIEWED_RUNNER_SHA" "$REVIEWED_PACKET_SHA"; do
+            [[ "$value" =~ ^[a-f0-9]{64}$ ]]
+          done
+          printf '%s  %s\n' "$REVIEWED_WORKFLOW_SHA" .github/workflows/server.yml | sha256sum --check --status
+          printf '%s  %s\n' "$REVIEWED_RUNNER_SHA" scripts/run-nginx-fix.sh | sha256sum --check --status
+          printf '%s  %s\n' "$REVIEWED_PACKET_SHA" scripts/nginx-fix.cjs | sha256sum --check --status
+      - name: Configure existing deployment SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          umask 077
           PORT="${DEPLOY_PORT:-22}"
           [[ "$PORT" =~ ^[0-9]{1,5}$ ]]
           (( 10#$PORT >= 1 && 10#$PORT <= 65535 ))
@@ -28,18 +91,30 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" > ~/.ssh/known_hosts
+          ssh-keyscan -p "$PORT" "$DEPLOY_HOST" > ~/.ssh/known_hosts 2>/dev/null
+          [[ -s ~/.ssh/known_hosts ]]
           chmod 600 ~/.ssh/known_hosts
-      - name: Inspect production without deployment
+      - name: Execute hash-bound Nginx packet only
         env:
+          PACKET_ACTION: ${{ inputs.action }}
+          REVIEWED_PACKET_SHA: ${{ inputs.reviewed_packet_sha }}
+          TARGET_PATH: ${{ inputs.target_path }}
+          FILE_SHAS: ${{ inputs.file_shas }}
+          FULL_SHA: ${{ inputs.full_sha }}
+          PATCHED_FULL_SHA: ${{ inputs.patched_full_sha }}
+          RUNTIME_SHA: ${{ inputs.runtime_sha }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_SERVER_PATH: ${{ secrets.DEPLOY_SERVER_PATH }}
         run: |
           set -euo pipefail
-          [[ "$DEPLOY_SERVER_PATH" =~ ^/[a-zA-Z0-9_./-]+$ && "$DEPLOY_SERVER_PATH" != / ]]
-          [[ "$DEPLOY_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ]]
-          ssh -o BatchMode=yes -o ConnectTimeout=15 -p "${DEPLOY_PORT:-22}" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '$DEPLOY_SERVER_PATH' && ./.runtime/node/bin/node -" < scripts/inspect-nginx.cjs
+          if [[ "$PACKET_ACTION" != inspect ]]; then
+            [[ "$FILE_SHAS" =~ ^[a-f0-9]{64}\ [a-f0-9]{64}$ ]]
+            export FILE_SHA="${FILE_SHAS%% *}"
+            export PATCHED_FILE_SHA="${FILE_SHAS#* }"
+          fi
+          bash scripts/run-nginx-fix.sh
+      - name: Remove runner SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_rsa
