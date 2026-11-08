@@ -376,6 +376,7 @@ async function main(args = process.argv.slice(2)) {
     const fileMetadata = { uid: stat.uid, gid: stat.gid, mode: stat.mode & 0o7777, linkCount: stat.nlink, extendedMetadataAbsent: true }
     const observed = await probes(c.alreadyPatched ? 403 : 401, d.probe)
     const report = { fileMetadata, result: 'inspected', action: 'inspect', mutated: false, ...summary(c, dump, identity), baselinePassed: observed.ok, probes: observed.results }
+    report.digestAscii = Object.fromEntries(['fileSha256', 'fullConfigSha256', 'patchedFileSha256', 'patchedFullConfigSha256', 'runtimeSha256'].map(key => [key, report[key] && Array.from(report[key], char => char.charCodeAt(0))]))
     console.log(JSON.stringify(report, null, 2))
     return
   }
