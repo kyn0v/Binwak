@@ -95,12 +95,17 @@ function candidate(dump, readFile = fs.readFileSync, realpath = fs.realpathSync)
   const rules = locations.filter(n => n.args.join(' ') === 'location ~* ^/api/admin' && n.entries.length === 1 && n.entries[0].args.join(' ') === 'return 403' && !n.entries[0].entries)
   const blockers = new Set()
   const safeDirect = new Set(['listen', 'server_name', 'ssl_certificate', 'ssl_certificate_key', 'ssl_protocols', 'ssl_ciphers', 'ssl_prefer_server_ciphers', 'ssl_session_cache', 'ssl_session_timeout', 'ssl_session_tickets', 'ssl_dhparam', 'ssl_stapling', 'ssl_stapling_verify', 'ssl_trusted_certificate', 'resolver', 'resolver_timeout', 'access_log', 'error_log', 'client_max_body_size', 'charset', 'root', 'index'])
+  const tlsInclude = n => {
+    if (n.args.length !== 2 || n.args[1] !== '/etc/letsencrypt/options-ssl-nginx.conf') return false
+    const included = files.find(f => f.source === n.args[1])
+    return !!included && included.tree.entries.length > 0 && included.tree.entries.every(entry => !entry.entries && (entry.args[0].startsWith('ssl_') && safeDirect.has(entry.args[0])))
+  }
   for (const n of server.entries) {
     if (n.entries && n.args[0] !== 'location') blockers.add('SERVER_BLOCK_UNSUPPORTED')
-    if (!n.entries && !safeDirect.has(n.args[0])) blockers.add('SERVER_DIRECTIVE_UNSUPPORTED')
+    if (!n.entries && !safeDirect.has(n.args[0]) && !(n.args[0] === 'include' && tlsInclude(n))) blockers.add('SERVER_DIRECTIVE_UNSUPPORTED')
   }
   for (const n of walk(server)) {
-    if (n.args[0] === 'include') blockers.add('SERVER_INCLUDE_REQUIRES_REVIEW')
+    if (n.args[0] === 'include' && !(server.entries.includes(n) && tlsInclude(n))) blockers.add('SERVER_INCLUDE_REQUIRES_REVIEW')
     if (n !== server && n.entries && n.args[0] === 'location' && !locations.includes(n)) blockers.add('NESTED_LOCATION_REQUIRES_REVIEW')
   }
   for (const n of locations) {
@@ -131,7 +136,7 @@ function candidate(dump, readFile = fs.readFileSync, realpath = fs.realpathSync)
     need(parse(patched).entries.length === file.tree.entries.length, 'PATCH_STRUCTURE_CHANGED')
     need(patched.subarray(0, offset).equals(file.bytes.subarray(0, offset)) && patched.subarray(offset + insertion.length).equals(file.bytes.subarray(offset)), 'PATCH_NOT_SINGLE_INSERTION')
   }
-  return { files, file, server, targetPath, patched, patchedDump, insertion, alreadyPatched: rules.length === 1, blockers: [...blockers], metadata: { host: HOST, listenPort: 443, tls: true, proxy: '127.0.0.1:3000', locationCount: locations.length } }
+  return { files, file, server, targetPath, patched, patchedDump, insertion, alreadyPatched: rules.length === 1, blockers: [...blockers], metadata: { host: HOST, listenPort: 443, tls: true, proxy: '127.0.0.1:3000', locationCount: locations.length, directNames: server.entries.map(n => n.args[0]).filter(name => /^[a-z_]+$/.test(name)), includes: server.entries.filter(n => n.args[0] === 'include').map(n => ({ recognizedTlsOnly: tlsInclude(n), path: n.args[1] === '/etc/letsencrypt/options-ssl-nginx.conf' ? n.args[1] : 'unrecognized' })) } }
 }
 function summary(c, dump, runtimeSha256) {
   return { targetSource: c.file.source, targetPath: c.targetPath, fileSha256: hash(c.file.bytes), fullConfigSha256: hash(dump), patchedFileSha256: c.patched && hash(c.patched), patchedFullConfigSha256: c.patchedDump && hash(c.patchedDump), runtimeSha256, server: c.metadata, alreadyPatched: c.alreadyPatched, blockers: c.blockers, insertion: c.insertion?.toString('ascii') || null }
