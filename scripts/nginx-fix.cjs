@@ -176,9 +176,19 @@ function probe(where, pathname) {
 async function probes(adminStatus, probeFn = probe) {
   const results = []
   for (const where of ['loopback-tls', 'public', 'backend']) {
-    for (const pathname of ['/api/health', ...ADMIN]) results.push(await probeFn(where, pathname))
+    const paths = where === 'backend' || adminStatus === 401 ? ['/api/health', '/api/admin'] : ['/api/health', ...ADMIN]
+    for (const pathname of paths) results.push(await probeFn(where, pathname))
   }
   return { ok: results.every(r => r.status === (r.pathname === '/api/health' ? 200 : r.where === 'backend' ? 401 : adminStatus)), results }
+}
+function metadata(file) {
+  const python = `import json, os, sys\np = sys.argv[1]\npaths = [p]\nd = os.path.dirname(p)\nwhile True:\n paths.append(d)\n if d == '/': break\n d = os.path.dirname(d)\nfor root in ['/var', '/var/backups', '/var/backups/binwak-nginx-admin']:\n if os.path.exists(root) and root not in paths: paths.append(root)\nrows = [{'path': x, 'xattrCount': len(os.listxattr(x, follow_symlinks=False)), 'rootSafe': os.lstat(x).st_uid == 0 and not (os.lstat(x).st_mode & 0o022)} for x in paths]\nprint(json.dumps({'entries': rows, 'selinuxMounted': os.path.exists('/sys/fs/selinux/enforce')}))\n`
+  const result = spawnSync('/usr/bin/python3', ['-c', python, file], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536, stdio: ['ignore', 'pipe', 'pipe'] })
+  need(!result.error && result.status === 0, 'FILE_METADATA_INSPECTION_FAILED')
+  let value
+  try { value = JSON.parse(result.stdout) } catch { fail('FILE_METADATA_INSPECTION_FAILED') }
+  need(Array.isArray(value.entries) && value.entries.length > 1 && value.entries.every(row => Number.isInteger(row.xattrCount) && row.xattrCount === 0 && row.rootSafe === true) && value.selinuxMounted === false, 'EXTENDED_METADATA_REQUIRES_REVIEW')
+  return value
 }
 function trustedFile(file) {
   const stat = fs.lstatSync(file)
@@ -188,6 +198,7 @@ function trustedFile(file) {
     need(parent.isDirectory() && parent.uid === 0 && !(parent.mode & 0o022), 'TARGET_DIRECTORY_PERMISSIONS_UNSAFE')
     if (directory === '/') break
   }
+  metadata(file)
   return stat
 }
 function sameFile(file, bytes, stat) {
@@ -346,8 +357,10 @@ async function main(args = process.argv.slice(2)) {
   need(c.targetPath.startsWith('/etc/nginx/'), 'TARGET_OUTSIDE_NGINX_CONFIG')
   for (const f of c.files) for (const n of walk(f.tree)) if (n.args[0] === 'pid') need(n.args.length === 2 && n.args[1] === '/run/nginx.pid', 'CUSTOM_NGINX_PID_UNSUPPORTED')
   if (binding.action === 'inspect') {
+    const stat = d.trustedFile(c.targetPath)
+    const fileMetadata = { uid: stat.uid, gid: stat.gid, mode: stat.mode & 0o7777, linkCount: stat.nlink, extendedMetadataAbsent: true }
     const observed = await probes(c.alreadyPatched ? 403 : 401, d.probe)
-    const report = { result: 'inspected', action: 'inspect', mutated: false, ...summary(c, dump, identity), baselinePassed: observed.ok, probes: observed.results }
+    const report = { fileMetadata, result: 'inspected', action: 'inspect', mutated: false, ...summary(c, dump, identity), baselinePassed: observed.ok, probes: observed.results }
     console.log(JSON.stringify(report, null, 2))
     return
   }

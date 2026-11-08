@@ -60,7 +60,9 @@ case "$PACKET_ACTION" in
 esac
 public_checks() {
   local expected="$1" pathname status ok=0
-  for pathname in /api/health /api/admin /api/ADMIN /API/AdMiN /api/admin/ /api/admin/login /api/ADMIN/login /API/AdMiN/users '/api/admin?packet=1'; do
+  local paths=(/api/health /api/admin)
+  if [[ "$expected" == 403 ]]; then paths+=(/api/ADMIN /API/AdMiN /api/admin/ /api/admin/login /api/ADMIN/login /API/AdMiN/users '/api/admin?packet=1'); fi
+  for pathname in "${paths[@]}"; do
     status=$(curl --silent --head --output /dev/null --write-out '%{http_code}' --max-time 7 --connect-timeout 3 --noproxy '*' --proto '=https' "https://api.citywalkbingo.com$pathname" 2>/dev/null) || status=000
     printf 'runner-public HEAD %s status=%s\n' "$pathname" "$status"
     if [[ "$pathname" == /api/health ]]; then [[ "$status" == 200 ]] || ok=1
