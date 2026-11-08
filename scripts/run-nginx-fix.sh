@@ -59,16 +59,16 @@ case "$PACKET_ACTION" in
   rollback) report rollback rolled-back ;;
 esac
 public_checks() {
-  local expected="$1" pathname status ok=0
+  local expected="$1" pathname status
   local paths=(/api/health /api/admin)
   if [[ "$expected" == 403 ]]; then paths+=(/api/ADMIN /API/AdMiN /api/admin/ /api/admin/login /api/ADMIN/login /API/AdMiN/users '/api/admin?packet=1'); fi
   for pathname in "${paths[@]}"; do
     status=$(curl --silent --head --output /dev/null --write-out '%{http_code}' --max-time 7 --connect-timeout 3 --noproxy '*' --proto '=https' "https://api.citywalkbingo.com$pathname" 2>/dev/null) || status=000
     printf 'runner-public HEAD %s status=%s\n' "$pathname" "$status"
-    if [[ "$pathname" == /api/health ]]; then [[ "$status" == 200 ]] || ok=1
-    else [[ "$status" == "$expected" ]] || ok=1; fi
+    if [[ "$pathname" == /api/health ]]; then [[ "$status" == 200 ]] || return 1
+    else [[ "$status" == "$expected" ]] || return 1; fi
   done
-  return "$ok"
+  return 0
 }
 if [[ "$PACKET_ACTION" == rollback ]]; then public_checks 401 || fail ROLLBACK_EXTERNAL_VERIFICATION_FAILED
 elif ! public_checks 403; then

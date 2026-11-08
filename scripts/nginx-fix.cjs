@@ -176,13 +176,23 @@ function probe(where, pathname) {
 async function probes(adminStatus, probeFn = probe) {
   const results = []
   for (const where of ['loopback-tls', 'public', 'backend']) {
-    const paths = where === 'backend' || adminStatus === 401 ? ['/api/health', '/api/admin'] : ['/api/health', ...ADMIN]
-    for (const pathname of paths) results.push(await probeFn(where, pathname))
+    const primary = await probeFn(where, '/api/health')
+    results.push(primary)
+    if (primary.status !== 200) return { ok: false, results }
+    const entry = await probeFn(where, '/api/admin')
+    results.push(entry)
+    if (entry.status !== (where === 'backend' ? 401 : adminStatus)) return { ok: false, results }
+    if (where === 'backend' || adminStatus === 401) continue
+    for (const pathname of ADMIN.slice(1)) {
+      const result = await probeFn(where, pathname)
+      results.push(result)
+      if (result.status !== 403) return { ok: false, results }
+    }
   }
   return { ok: results.every(r => r.status === (r.pathname === '/api/health' ? 200 : r.where === 'backend' ? 401 : adminStatus)), results }
 }
 function metadata(file) {
-  const python = `import json, os, sys\np = sys.argv[1]\npaths = [p]\nd = os.path.dirname(p)\nwhile True:\n paths.append(d)\n if d == '/': break\n d = os.path.dirname(d)\nfor root in ['/var', '/var/backups', '/var/backups/binwak-nginx-admin']:\n if os.path.exists(root) and root not in paths: paths.append(root)\nrows = [{'path': x, 'xattrCount': len(os.listxattr(x, follow_symlinks=False)), 'rootSafe': os.lstat(x).st_uid == 0 and not (os.lstat(x).st_mode & 0o022)} for x in paths]\nprint(json.dumps({'entries': rows, 'selinuxMounted': os.path.exists('/sys/fs/selinux/enforce')}))\n`
+  const python = `import json, os, sys\np = sys.argv[1]\npaths = [p]\nd = os.path.dirname(p)\nwhile True:\n paths.append(d)\n if d == '/': break\n d = os.path.dirname(d)\nfor root in ['/var', '/var/backups', '/var/backups/binwak-nginx-admin']:\n try: os.lstat(root)\n except FileNotFoundError: continue\n if root not in paths: paths.append(root)\ntry:\n os.stat('/sys/fs/selinux/enforce')\n selinux = True\nexcept FileNotFoundError:\n selinux = False\nrows = [{'path': x, 'xattrCount': len(os.listxattr(x, follow_symlinks=False)), 'rootSafe': os.lstat(x).st_uid == 0 and not (os.lstat(x).st_mode & 0o022)} for x in paths]\nprint(json.dumps({'entries': rows, 'selinuxMounted': selinux}))\n`
   const result = spawnSync('/usr/bin/python3', ['-c', python, file], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536, stdio: ['ignore', 'pipe', 'pipe'] })
   need(!result.error && result.status === 0, 'FILE_METADATA_INSPECTION_FAILED')
   let value
@@ -318,7 +328,7 @@ async function transaction(c, dump, binding, d) {
     let observed
     for (let attempt = 0; attempt < 3; attempt++) {
       observed = await probes(binding.action === 'apply' ? 403 : 401, d.probe)
-      if (observed.ok) break
+      if (observed.ok || observed.results.some(result => result.pathname.includes('/login') && result.status !== 403)) break
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
     need(observed.ok, 'POST_RELOAD_PROBES_FAILED')
